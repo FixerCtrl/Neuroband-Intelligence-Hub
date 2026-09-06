@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neuroband Intelligence Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">N</span>
+      <div class="brand-text">
+        <span class="brand-name">Neuroband</span>
+        <span class="brand-sub">Intelligence Hub</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item is-active" data-tab="overview">Overview</button>
+      <button class="nav-item" data-tab="plan">Collection Plan</button>
+      <button class="nav-item" data-tab="repository">Repository</button>
+      <button class="nav-item" data-tab="manual">Manual</button>
+    </nav>
+
+    <div class="sidebar-status">
+      <div class="status-row">
+        <span class="status-dot" id="conn-dot"></span>
+        <span id="conn-label">Checking connection…</span>
+      </div>
+      <div class="status-row muted" id="entry-count">— entries stored</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <section class="panel is-active" id="panel-overview">
+      <header class="panel-head">
+        <p class="eyebrow">Key Intelligence Topic</p>
+        <h1 id="kit-text" class="kit-statement"></h1>
+      </header>
+
+      <div class="kin-grid" id="kin-grid"></div>
+
+      <p class="hint">This structure comes straight from <code>config.js</code> — update it there once, and it flows through every filter and tag in the Repository.</p>
+    </section>
+
+    <!-- COLLECTION PLAN -->
+    <section class="panel" id="panel-plan">
+      <header class="panel-head">
+        <p class="eyebrow">Phase 1</p>
+        <h1>Data Collection Plan</h1>
+      </header>
+      <div class="doc-block" data-slug="collection_plan">
+        <div class="doc-view" id="view-collection_plan"></div>
+        <textarea class="doc-edit is-hidden" id="edit-collection_plan"></textarea>
+        <div class="doc-actions">
+          <button class="btn btn-ghost" data-edit="collection_plan">Edit</button>
+          <button class="btn btn-primary is-hidden" data-save="collection_plan">Save changes</button>
+          <button class="btn btn-ghost is-hidden" data-cancel="collection_plan">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPOSITORY -->
+    <section class="panel" id="panel-repository">
+      <header class="panel-head panel-head-row">
+        <div>
+          <p class="eyebrow">Phase 2 &amp; 3</p>
+          <h1>Repository</h1>
+        </div>
+        <button class="btn btn-primary" id="open-add-entry">+ Add source</button>
+      </header>
+
+      <div class="filter-bar">
+        <input type="search" id="filter-search" placeholder="Search source, author, notes…" />
+        <select id="filter-kin"><option value="">All KINs</option></select>
+        <select id="filter-kiq"><option value="">All KIQs</option></select>
+        <select id="filter-type"><option value="">All source types</option></select>
+      </div>
+
+      <div class="card-grid" id="card-grid"></div>
+      <p class="empty-state is-hidden" id="empty-state">No entries match yet. Add your first source, or clear your filters.</p>
+    </section>
+
+    <!-- MANUAL -->
+    <section class="panel" id="panel-manual">
+      <header class="panel-head">
+        <p class="eyebrow">Phase 4</p>
+        <h1>System Manual</h1>
+      </header>
+      <div class="doc-block" data-slug="manual">
+        <div class="doc-view" id="view-manual"></div>
+        <textarea class="doc-edit is-hidden" id="edit-manual"></textarea>
+        <div class="doc-actions">
+          <button class="btn btn-ghost" data-edit="manual">Edit</button>
+          <button class="btn btn-primary is-hidden" data-save="manual">Save changes</button>
+          <button class="btn btn-ghost is-hidden" data-cancel="manual">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ADD ENTRY MODAL -->
+<div class="modal-overlay is-hidden" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Add a source</h2>
+      <button class="modal-close" id="close-add-entry">&times;</button>
+    </div>
+
+    <form id="entry-form">
+      <div class="field-row">
+        <label>KIN
+          <select id="f-kin" required></select>
+        </label>
+        <label>KIQ
+          <select id="f-kiq" required></select>
+        </label>
+      </div>
+
+      <label>Source (full reference or name)
+        <input type="text" id="f-source" placeholder="e.g. Business Insider Africa" required />
+      </label>
+
+      <div class="field-row">
+        <label>Author / organisation
+          <input type="text" id="f-author" placeholder="e.g. Whoop Inc." required />
+        </label>
+        <label>Type of source
+          <select id="f-type" required></select>
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label>Date published
+          <input type="date" id="f-date-pub" required />
+        </label>
+        <label>Date collected
+          <input type="date" id="f-date-collected" required />
+        </label>
+      </div>
+
+      <label>Relevance to KIQ (why this source matters)
+        <textarea id="f-relevance" rows="3" placeholder="e.g. Confirms competitor pricing strategy referenced in KIN1_KIQ2" required></textarea>
+      </label>
+
+      <label>Extract file (PDF or image — the actual downloaded source, not a link)
+        <input type="file" id="f-file" accept=".pdf,image/*" required />
+      </label>
+
+      <p class="filename-preview" id="filename-preview"></p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancel-add-entry">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-entry">Save to repository</button>
+      </div>
+      <p class="form-status" id="form-status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- DETAIL / VIEW MODAL -->
+<div class="modal-overlay is-hidden" id="detail-overlay">
+  <div class="modal" id="detail-modal"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
