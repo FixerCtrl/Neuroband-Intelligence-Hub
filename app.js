@@ -95,7 +95,8 @@ function initTheme(){
 function applyTheme(theme){
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("theme-toggle");
-  btn.textContent = theme === "light" ? "☀️" : "🌙";
+  btn.textContent = theme === "light" ? "☾" : "☀";
+  btn.title = theme === "light" ? "Switch to dark mode" : "Switch to light mode";
 }
 
 function initSupabase(){
