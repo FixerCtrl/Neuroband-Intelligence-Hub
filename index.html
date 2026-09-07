@@ -30,6 +30,10 @@
       <button class="nav-item" data-tab="manual">Manual</button>
     </nav>
 
+    <div class="auth-box" id="auth-box">
+      <button class="btn btn-ghost btn-small" id="open-auth" style="width:100%;">Sign in</button>
+    </div>
+
     <div class="sidebar-status">
       <div class="status-row">
         <span class="status-dot" id="conn-dot"></span>
@@ -271,6 +275,29 @@
         <button type="submit" class="btn btn-primary" id="submit-task">Assign task</button>
       </div>
       <p class="form-status" id="task-form-status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay is-hidden" id="auth-modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="auth-modal-title">Sign in</h2>
+      <button class="modal-close" id="close-auth">&times;</button>
+    </div>
+    <form id="auth-form">
+      <label>Email
+        <input type="email" id="auth-email" required />
+      </label>
+      <label>Password
+        <input type="password" id="auth-password" required minlength="6" />
+      </label>
+      <div class="modal-actions" style="justify-content:space-between; align-items:center;">
+        <button type="button" class="btn btn-ghost btn-small" id="auth-toggle-mode">Need an account? Sign up</button>
+        <button type="submit" class="btn btn-primary" id="submit-auth">Sign in</button>
+      </div>
+      <p class="form-status" id="auth-form-status"></p>
     </form>
   </div>
 </div>

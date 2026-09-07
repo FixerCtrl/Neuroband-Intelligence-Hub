@@ -2,8 +2,9 @@
 -- NEUROBAND INTELLIGENCE HUB — DATABASE SETUP
 -- Safe to run this whole file again at any point — every
 -- statement below is written so it won't error if the table,
--- policy, or bucket already exists. Run it in: Supabase →
--- SQL Editor → New query → paste this whole file → Run.
+-- policy, function, or bucket already exists. Run it in:
+-- Supabase → SQL Editor → New query → paste this whole file →
+-- Run.
 -- ============================================================
 
 -- Table: entries (Phase 2/3 — repository, one row per source)
@@ -51,10 +52,21 @@ create table if not exists tasks (
 );
 
 -- ------------------------------------------------------------
+-- ADMIN CHECK
+-- Edit the email list below to match ADMIN_EMAILS in config.js.
+-- Anyone signed in with one of these emails can delete things;
+-- everyone else who's signed in can still add/edit, just not
+-- delete.
+-- ------------------------------------------------------------
+create or replace function is_admin() returns boolean as $$
+  select (auth.jwt() ->> 'email') in ('you@example.com');
+$$ language sql stable;
+
+-- ------------------------------------------------------------
 -- ROW LEVEL SECURITY
--- Open read/write for anyone with the anon key — fine for a
--- small class project on a private URL, not how you'd configure
--- a system holding real confidential company data.
+-- Anyone can read (the system stays publicly viewable, per the
+-- assignment brief). Only signed-in users can add/edit. Only
+-- admins (see is_admin() above) can delete.
 -- ------------------------------------------------------------
 alter table entries enable row level security;
 alter table documents enable row level security;
@@ -64,37 +76,54 @@ alter table tasks enable row level security;
 drop policy if exists "Allow all read on entries" on entries;
 drop policy if exists "Allow all insert on entries" on entries;
 drop policy if exists "Allow all update on entries" on entries;
-create policy "Allow all read on entries" on entries for select using (true);
-create policy "Allow all insert on entries" on entries for insert with check (true);
-create policy "Allow all update on entries" on entries for update using (true);
+drop policy if exists "Public read on entries" on entries;
+drop policy if exists "Authenticated insert on entries" on entries;
+drop policy if exists "Authenticated update on entries" on entries;
+drop policy if exists "Admin delete on entries" on entries;
+create policy "Public read on entries" on entries for select using (true);
+create policy "Authenticated insert on entries" on entries for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated update on entries" on entries for update using (auth.role() = 'authenticated');
+create policy "Admin delete on entries" on entries for delete using (is_admin());
 
 drop policy if exists "Allow all read on documents" on documents;
 drop policy if exists "Allow all insert on documents" on documents;
 drop policy if exists "Allow all update on documents" on documents;
-create policy "Allow all read on documents" on documents for select using (true);
-create policy "Allow all insert on documents" on documents for insert with check (true);
-create policy "Allow all update on documents" on documents for update using (true);
+drop policy if exists "Public read on documents" on documents;
+drop policy if exists "Authenticated insert on documents" on documents;
+drop policy if exists "Authenticated update on documents" on documents;
+create policy "Public read on documents" on documents for select using (true);
+create policy "Authenticated insert on documents" on documents for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated update on documents" on documents for update using (auth.role() = 'authenticated');
 
 drop policy if exists "Allow all read on members" on members;
 drop policy if exists "Allow all insert on members" on members;
 drop policy if exists "Allow all update on members" on members;
 drop policy if exists "Allow all delete on members" on members;
-create policy "Allow all read on members" on members for select using (true);
-create policy "Allow all insert on members" on members for insert with check (true);
-create policy "Allow all update on members" on members for update using (true);
-create policy "Allow all delete on members" on members for delete using (true);
+drop policy if exists "Public read on members" on members;
+drop policy if exists "Authenticated insert on members" on members;
+drop policy if exists "Authenticated update on members" on members;
+drop policy if exists "Admin delete on members" on members;
+create policy "Public read on members" on members for select using (true);
+create policy "Authenticated insert on members" on members for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated update on members" on members for update using (auth.role() = 'authenticated');
+create policy "Admin delete on members" on members for delete using (is_admin());
 
 drop policy if exists "Allow all read on tasks" on tasks;
 drop policy if exists "Allow all insert on tasks" on tasks;
 drop policy if exists "Allow all update on tasks" on tasks;
 drop policy if exists "Allow all delete on tasks" on tasks;
-create policy "Allow all read on tasks" on tasks for select using (true);
-create policy "Allow all insert on tasks" on tasks for insert with check (true);
-create policy "Allow all update on tasks" on tasks for update using (true);
-create policy "Allow all delete on tasks" on tasks for delete using (true);
+drop policy if exists "Public read on tasks" on tasks;
+drop policy if exists "Authenticated insert on tasks" on tasks;
+drop policy if exists "Authenticated update on tasks" on tasks;
+drop policy if exists "Admin delete on tasks" on tasks;
+create policy "Public read on tasks" on tasks for select using (true);
+create policy "Authenticated insert on tasks" on tasks for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated update on tasks" on tasks for update using (auth.role() = 'authenticated');
+create policy "Admin delete on tasks" on tasks for delete using (is_admin());
 
 -- ------------------------------------------------------------
 -- STORAGE BUCKETS
+-- Same model: public read, authenticated upload/update.
 -- ------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('sources', 'sources', true)
@@ -106,17 +135,22 @@ on conflict (id) do nothing;
 
 drop policy if exists "Allow all read on sources bucket" on storage.objects;
 drop policy if exists "Allow all upload on sources bucket" on storage.objects;
-create policy "Allow all read on sources bucket" on storage.objects
+drop policy if exists "Public read on sources bucket" on storage.objects;
+drop policy if exists "Authenticated upload on sources bucket" on storage.objects;
+create policy "Public read on sources bucket" on storage.objects
   for select using (bucket_id = 'sources');
-create policy "Allow all upload on sources bucket" on storage.objects
-  for insert with check (bucket_id = 'sources');
+create policy "Authenticated upload on sources bucket" on storage.objects
+  for insert with check (bucket_id = 'sources' and auth.role() = 'authenticated');
 
 drop policy if exists "Allow all read on avatars bucket" on storage.objects;
 drop policy if exists "Allow all upload on avatars bucket" on storage.objects;
 drop policy if exists "Allow all update on avatars bucket" on storage.objects;
-create policy "Allow all read on avatars bucket" on storage.objects
+drop policy if exists "Public read on avatars bucket" on storage.objects;
+drop policy if exists "Authenticated upload on avatars bucket" on storage.objects;
+drop policy if exists "Authenticated update on avatars bucket" on storage.objects;
+create policy "Public read on avatars bucket" on storage.objects
   for select using (bucket_id = 'avatars');
-create policy "Allow all upload on avatars bucket" on storage.objects
-  for insert with check (bucket_id = 'avatars');
-create policy "Allow all update on avatars bucket" on storage.objects
-  for update using (bucket_id = 'avatars');
+create policy "Authenticated upload on avatars bucket" on storage.objects
+  for insert with check (bucket_id = 'avatars' and auth.role() = 'authenticated');
+create policy "Authenticated update on avatars bucket" on storage.objects
+  for update using (bucket_id = 'avatars' and auth.role() = 'authenticated');

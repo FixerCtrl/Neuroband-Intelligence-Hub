@@ -60,11 +60,13 @@ let sbClient = null;
 let currentEntries = [];
 let currentMembers = [];
 let currentTasks = [];
+let currentUser = null;
 
 // ---------- INIT ----------
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initSupabase();
+  initAuth();
   renderOverview();
   wireNav();
   wireDocBlocks();
@@ -72,6 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireModal();
   wireMemberModal();
   wireTaskModal();
+  wireAuthModal();
   populateFormDropdowns();
   loadDocument("collection_plan");
   loadDocument("manual");
@@ -79,6 +82,126 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMembers();
   loadTasks();
 });
+
+// ============================================================
+// AUTH
+// ============================================================
+function isAdminEmail(email){
+  return !!email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email.toLowerCase());
+}
+
+async function initAuth(){
+  if (!sbClient) { renderAuthBox(); return; }
+
+  const { data: { session } } = await sbClient.auth.getSession();
+  currentUser = session ? session.user : null;
+  renderAuthBox();
+
+  sbClient.auth.onAuthStateChange((_event, session) => {
+    currentUser = session ? session.user : null;
+    renderAuthBox();
+    renderMembers();   // re-show/hide admin-only controls
+    renderEntries();
+  });
+}
+
+function renderAuthBox(){
+  const box = document.getElementById("auth-box");
+  if (!currentUser) {
+    box.innerHTML = `<button class="btn btn-ghost btn-small" id="open-auth" style="width:100%;">Sign in</button>`;
+    document.getElementById("open-auth").addEventListener("click", openAuthModal);
+    return;
+  }
+  const admin = isAdminEmail(currentUser.email);
+  box.innerHTML = `
+    <div class="auth-signed-in">
+      ${admin ? `<span class="auth-admin-badge">ADMIN</span>` : ""}
+      <span class="auth-email">${escapeHtml(currentUser.email)}</span>
+      <button class="btn btn-ghost btn-small" id="sign-out-btn">Sign out</button>
+    </div>
+  `;
+  document.getElementById("sign-out-btn").addEventListener("click", async () => {
+    await sbClient.auth.signOut();
+  });
+}
+
+// Call this at the top of anything that writes to the database.
+// Returns true if the user may proceed; otherwise opens the
+// sign-in modal and returns false.
+function requireAuth(){
+  if (currentUser) return true;
+  openAuthModal();
+  return false;
+}
+
+let authMode = "signin"; // or "signup"
+
+function wireAuthModal(){
+  document.getElementById("open-auth")?.addEventListener("click", openAuthModal);
+  document.getElementById("close-auth").addEventListener("click", closeAuthModal);
+  document.getElementById("auth-modal-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "auth-modal-overlay") closeAuthModal();
+  });
+  document.getElementById("auth-toggle-mode").addEventListener("click", () => {
+    authMode = authMode === "signin" ? "signup" : "signin";
+    updateAuthModalMode();
+  });
+  document.getElementById("auth-form").addEventListener("submit", submitAuth);
+}
+
+function updateAuthModalMode(){
+  document.getElementById("auth-modal-title").textContent = authMode === "signin" ? "Sign in" : "Create an account";
+  document.getElementById("submit-auth").textContent = authMode === "signin" ? "Sign in" : "Sign up";
+  document.getElementById("auth-toggle-mode").textContent = authMode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in";
+}
+
+function openAuthModal(){
+  authMode = "signin";
+  updateAuthModalMode();
+  document.getElementById("auth-form-status").textContent = "";
+  document.getElementById("auth-modal-overlay").classList.remove("is-hidden");
+}
+
+function closeAuthModal(){
+  document.getElementById("auth-modal-overlay").classList.add("is-hidden");
+  document.getElementById("auth-form").reset();
+}
+
+async function submitAuth(e){
+  e.preventDefault();
+  const status = document.getElementById("auth-form-status");
+  if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
+
+  const email = document.getElementById("auth-email").value;
+  const password = document.getElementById("auth-password").value;
+  status.textContent = authMode === "signin" ? "Signing in…" : "Creating account…";
+  status.className = "form-status";
+
+  try {
+    if (authMode === "signin") {
+      const { error } = await sbClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      status.textContent = "Signed in.";
+      status.className = "form-status is-success";
+      setTimeout(closeAuthModal, 400);
+    } else {
+      const { data, error } = await sbClient.auth.signUp({ email, password });
+      if (error) throw error;
+      if (data.session) {
+        status.textContent = "Account created and signed in.";
+        status.className = "form-status is-success";
+        setTimeout(closeAuthModal, 400);
+      } else {
+        status.textContent = "Account created. Check your email to confirm before signing in.";
+        status.className = "form-status is-success";
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    status.textContent = err.message || "Something went wrong.";
+    status.className = "form-status is-error";
+  }
+}
 
 // ---------- THEME ----------
 function initTheme(){
@@ -183,6 +306,7 @@ async function loadDocument(slug){
 }
 
 async function saveDocument(slug){
+  if (!requireAuth()) return;
   const newContent = document.getElementById("edit-" + slug).value;
   document.getElementById("view-" + slug).textContent = newContent;
   document.getElementById("view-" + slug).dataset.raw = newContent;
@@ -342,6 +466,7 @@ function getPublicFileUrl(path){
 // ---------- ADD ENTRY MODAL ----------
 function wireModal(){
   document.getElementById("open-add-entry").addEventListener("click", () => {
+    if (!requireAuth()) return;
     document.getElementById("modal-overlay").classList.remove("is-hidden");
     updateFilenamePreview();
   });
@@ -365,6 +490,7 @@ function closeAddModal(){
 
 async function submitEntry(e){
   e.preventDefault();
+  if (!requireAuth()) return;
   const status = document.getElementById("form-status");
   const submitBtn = document.getElementById("submit-entry");
 
@@ -434,12 +560,13 @@ function initials(name){
 function renderMembers(){
   const grid = document.getElementById("member-grid");
   grid.innerHTML = "";
+  const isAdmin = currentUser && isAdminEmail(currentUser.email);
   currentMembers.forEach(m => {
     const card = document.createElement("div");
     card.className = "member-card";
     const avatarUrl = getPublicAvatarUrl(m.avatar_path);
     card.innerHTML = `
-      <button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>
+      ${isAdmin ? `<button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>` : ""}
       <div class="member-avatar" data-avatar-for="${m.id}" title="Click to change photo">
         ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
       </div>
@@ -465,6 +592,7 @@ function getPublicAvatarUrl(path){
 
 function wireMemberModal(){
   document.getElementById("open-add-member").addEventListener("click", () => {
+    if (!requireAuth()) return;
     document.getElementById("member-modal-overlay").classList.remove("is-hidden");
   });
   document.getElementById("close-add-member").addEventListener("click", closeAddMemberModal);
@@ -485,6 +613,7 @@ function closeAddMemberModal(){
 
 async function submitMember(e){
   e.preventDefault();
+  if (!requireAuth()) return;
   const status = document.getElementById("member-form-status");
   if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
 
@@ -516,6 +645,7 @@ async function submitMember(e){
 
 let reuploadTargetId = null;
 function reuploadAvatar(memberId){
+  if (!requireAuth()) return;
   reuploadTargetId = memberId;
   document.getElementById("avatar-reupload-input").click();
 }
@@ -542,7 +672,7 @@ async function handleAvatarReupload(e){
 }
 
 async function removeMember(memberId){
-  if (!sbClient) return;
+  if (!requireAuth()) return;
   if (!confirm("Remove this member? Tasks assigned to them will remain but show as unassigned.")) return;
   await sbClient.from("members").delete().eq("id", memberId);
   await loadMembers();
@@ -596,7 +726,10 @@ function renderTasks(){
   });
 
   list.querySelectorAll(".task-status").forEach(sel => {
-    sel.addEventListener("change", (e) => updateTaskStatus(e.target.dataset.taskId, e.target.value));
+    sel.addEventListener("change", (e) => {
+      if (!requireAuth()) { e.target.value = e.target.dataset.prevValue || e.target.value; renderTasks(); return; }
+      updateTaskStatus(e.target.dataset.taskId, e.target.value);
+    });
   });
 }
 
@@ -635,6 +768,7 @@ function updateTaskKiqOptions(kinId){
 function wireTaskModal(){
   populateTaskKinKiqDropdowns();
   document.getElementById("open-add-task").addEventListener("click", () => {
+    if (!requireAuth()) return;
     if (currentMembers.length === 0) {
       alert("Add at least one team member first, so there's someone to assign the task to.");
       return;
@@ -657,6 +791,7 @@ function closeAddTaskModal(){
 
 async function submitTask(e){
   e.preventDefault();
+  if (!requireAuth()) return;
   const status = document.getElementById("task-form-status");
   if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
 
