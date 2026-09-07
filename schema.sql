@@ -59,3 +59,52 @@ create policy "Allow all read on sources bucket" on storage.objects
 
 create policy "Allow all upload on sources bucket" on storage.objects
   for insert with check (bucket_id = 'sources');
+
+-- ------------------------------------------------------------
+-- TEAM: members (profile pictures) and tasks (work assignment)
+-- ------------------------------------------------------------
+create table if not exists members (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  avatar_path text,
+  created_at timestamptz default now()
+);
+
+create table if not exists tasks (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  kin text,
+  kiq text,
+  assigned_to uuid references members(id) on delete set null,
+  assigned_by uuid references members(id) on delete set null,
+  status text not null default 'To do',
+  due_date date,
+  created_at timestamptz default now()
+);
+
+alter table members enable row level security;
+alter table tasks enable row level security;
+
+create policy "Allow all read on members" on members for select using (true);
+create policy "Allow all insert on members" on members for insert with check (true);
+create policy "Allow all update on members" on members for update using (true);
+create policy "Allow all delete on members" on members for delete using (true);
+
+create policy "Allow all read on tasks" on tasks for select using (true);
+create policy "Allow all insert on tasks" on tasks for insert with check (true);
+create policy "Allow all update on tasks" on tasks for update using (true);
+create policy "Allow all delete on tasks" on tasks for delete using (true);
+
+-- Storage bucket for member profile pictures
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+create policy "Allow all read on avatars bucket" on storage.objects
+  for select using (bucket_id = 'avatars');
+
+create policy "Allow all upload on avatars bucket" on storage.objects
+  for insert with check (bucket_id = 'avatars');
+
+create policy "Allow all update on avatars bucket" on storage.objects
+  for update using (bucket_id = 'avatars');

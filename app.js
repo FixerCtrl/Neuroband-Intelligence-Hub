@@ -58,20 +58,45 @@ Edit this block directly — it's saved to your Supabase project as soon as you 
 
 let sbClient = null;
 let currentEntries = [];
+let currentMembers = [];
+let currentTasks = [];
 
 // ---------- INIT ----------
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
   initSupabase();
   renderOverview();
   wireNav();
   wireDocBlocks();
   wireFilters();
   wireModal();
+  wireMemberModal();
+  wireTaskModal();
   populateFormDropdowns();
   loadDocument("collection_plan");
   loadDocument("manual");
   loadEntries();
+  loadMembers();
+  loadTasks();
 });
+
+// ---------- THEME ----------
+function initTheme(){
+  const saved = localStorage.getItem("nb-theme") || "light";
+  applyTheme(saved);
+  document.getElementById("theme-toggle").addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme") || "light";
+    const next = current === "light" ? "dark" : "light";
+    applyTheme(next);
+    localStorage.setItem("nb-theme", next);
+  });
+}
+
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("theme-toggle");
+  btn.textContent = theme === "light" ? "☀️" : "🌙";
+}
 
 function initSupabase(){
   const dot = document.getElementById("conn-dot");
@@ -387,6 +412,275 @@ async function submitEntry(e){
     status.className = "form-status is-error";
   } finally {
     submitBtn.disabled = false;
+  }
+}
+
+// ============================================================
+// TEAM: MEMBERS
+// ============================================================
+async function loadMembers(){
+  if (!sbClient) { renderMembers(); return; }
+  const { data, error } = await sbClient.from("members").select("*").order("created_at", { ascending: true });
+  if (!error && data) currentMembers = data;
+  renderMembers();
+  populateTaskPeopleDropdowns();
+}
+
+function initials(name){
+  return (name || "?").trim().split(/\s+/).map(w => w[0]).slice(0,2).join("").toUpperCase();
+}
+
+function renderMembers(){
+  const grid = document.getElementById("member-grid");
+  grid.innerHTML = "";
+  currentMembers.forEach(m => {
+    const card = document.createElement("div");
+    card.className = "member-card";
+    const avatarUrl = getPublicAvatarUrl(m.avatar_path);
+    card.innerHTML = `
+      <button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>
+      <div class="member-avatar" data-avatar-for="${m.id}" title="Click to change photo">
+        ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
+      </div>
+      <div class="member-name">${escapeHtml(m.name)}</div>
+      <div class="member-avatar-hint">Click photo to update</div>
+    `;
+    grid.appendChild(card);
+  });
+
+  grid.querySelectorAll("[data-avatar-for]").forEach(el => {
+    el.addEventListener("click", () => reuploadAvatar(el.dataset.avatarFor));
+  });
+  grid.querySelectorAll("[data-remove-member]").forEach(el => {
+    el.addEventListener("click", () => removeMember(el.dataset.removeMember));
+  });
+}
+
+function getPublicAvatarUrl(path){
+  if (!path || !sbClient) return null;
+  const { data } = sbClient.storage.from("avatars").getPublicUrl(path);
+  return data ? data.publicUrl : null;
+}
+
+function wireMemberModal(){
+  document.getElementById("open-add-member").addEventListener("click", () => {
+    document.getElementById("member-modal-overlay").classList.remove("is-hidden");
+  });
+  document.getElementById("close-add-member").addEventListener("click", closeAddMemberModal);
+  document.getElementById("cancel-add-member").addEventListener("click", closeAddMemberModal);
+  document.getElementById("member-modal-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "member-modal-overlay") closeAddMemberModal();
+  });
+  document.getElementById("member-form").addEventListener("submit", submitMember);
+
+  document.getElementById("avatar-reupload-input").addEventListener("change", handleAvatarReupload);
+}
+
+function closeAddMemberModal(){
+  document.getElementById("member-modal-overlay").classList.add("is-hidden");
+  document.getElementById("member-form").reset();
+  document.getElementById("member-form-status").textContent = "";
+}
+
+async function submitMember(e){
+  e.preventDefault();
+  const status = document.getElementById("member-form-status");
+  if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
+
+  const name = document.getElementById("m-name").value;
+  const file = document.getElementById("m-avatar").files[0];
+  status.textContent = "Saving…";
+  status.className = "form-status";
+
+  try {
+    let avatarPath = null;
+    if (file) {
+      avatarPath = `member_${Date.now()}_${slugifySource(name)}.${file.name.split(".").pop()}`;
+      const { error: upErr } = await sbClient.storage.from("avatars").upload(avatarPath, file, { upsert: true });
+      if (upErr) throw upErr;
+    }
+    const { error: insErr } = await sbClient.from("members").insert({ name, avatar_path: avatarPath, created_at: new Date().toISOString() });
+    if (insErr) throw insErr;
+
+    status.textContent = "Added.";
+    status.className = "form-status is-success";
+    await loadMembers();
+    setTimeout(closeAddMemberModal, 400);
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Something went wrong: " + (err.message || err);
+    status.className = "form-status is-error";
+  }
+}
+
+let reuploadTargetId = null;
+function reuploadAvatar(memberId){
+  reuploadTargetId = memberId;
+  document.getElementById("avatar-reupload-input").click();
+}
+
+async function handleAvatarReupload(e){
+  const file = e.target.files[0];
+  if (!file || !reuploadTargetId || !sbClient) return;
+  const member = currentMembers.find(m => m.id === reuploadTargetId);
+  if (!member) return;
+  try {
+    const avatarPath = `member_${Date.now()}_${slugifySource(member.name)}.${file.name.split(".").pop()}`;
+    const { error: upErr } = await sbClient.storage.from("avatars").upload(avatarPath, file, { upsert: true });
+    if (upErr) throw upErr;
+    const { error: updErr } = await sbClient.from("members").update({ avatar_path: avatarPath }).eq("id", reuploadTargetId);
+    if (updErr) throw updErr;
+    await loadMembers();
+  } catch (err) {
+    console.error(err);
+    alert("Couldn't update photo: " + (err.message || err));
+  } finally {
+    e.target.value = "";
+    reuploadTargetId = null;
+  }
+}
+
+async function removeMember(memberId){
+  if (!sbClient) return;
+  if (!confirm("Remove this member? Tasks assigned to them will remain but show as unassigned.")) return;
+  await sbClient.from("members").delete().eq("id", memberId);
+  await loadMembers();
+  await loadTasks();
+}
+
+// ============================================================
+// TEAM: TASKS
+// ============================================================
+async function loadTasks(){
+  if (!sbClient) { renderTasks(); return; }
+  const { data, error } = await sbClient.from("tasks").select("*").order("created_at", { ascending: false });
+  if (!error && data) currentTasks = data;
+  renderTasks();
+}
+
+function memberById(id){ return currentMembers.find(m => m.id === id); }
+
+function personInlineHtml(memberId, fallback){
+  const m = memberById(memberId);
+  if (!m) return escapeHtml(fallback || "Unassigned");
+  const url = getPublicAvatarUrl(m.avatar_path);
+  return `<span class="person-inline"><span class="person-avatar-mini">${url ? `<img src="${url}" alt="" />` : initials(m.name)}</span>${escapeHtml(m.name)}</span>`;
+}
+
+function renderTasks(){
+  const list = document.getElementById("task-list");
+  list.innerHTML = "";
+  document.getElementById("task-empty-state").classList.toggle("is-hidden", currentTasks.length !== 0);
+
+  currentTasks.forEach(t => {
+    const card = document.createElement("div");
+    card.className = "task-card";
+    card.innerHTML = `
+      <div class="task-main">
+        <p class="task-title">${escapeHtml(t.title)}</p>
+        <div class="task-tags">
+          ${t.kin ? `<span class="tag tag-kin">${t.kin}</span>` : ""}
+          ${t.kiq ? `<span class="tag tag-kiq">${t.kiq}</span>` : ""}
+        </div>
+        <div class="task-people">${personInlineHtml(t.assigned_to)} ← assigned by ${personInlineHtml(t.assigned_by)}</div>
+      </div>
+      <span class="task-due">${t.due_date ? "Due " + t.due_date : ""}</span>
+      <select class="task-status" data-task-id="${t.id}">
+        <option${t.status === "To do" ? " selected" : ""}>To do</option>
+        <option${t.status === "In progress" ? " selected" : ""}>In progress</option>
+        <option${t.status === "Done" ? " selected" : ""}>Done</option>
+      </select>
+    `;
+    list.appendChild(card);
+  });
+
+  list.querySelectorAll(".task-status").forEach(sel => {
+    sel.addEventListener("change", (e) => updateTaskStatus(e.target.dataset.taskId, e.target.value));
+  });
+}
+
+async function updateTaskStatus(taskId, status){
+  if (!sbClient) return;
+  await sbClient.from("tasks").update({ status }).eq("id", taskId);
+  const t = currentTasks.find(x => x.id === taskId);
+  if (t) t.status = status;
+}
+
+function populateTaskPeopleDropdowns(){
+  const to = document.getElementById("t-assigned-to");
+  const by = document.getElementById("t-assigned-by");
+  [to, by].forEach(sel => { sel.innerHTML = ""; });
+  currentMembers.forEach(m => {
+    to.appendChild(new Option(m.name, m.id));
+    by.appendChild(new Option(m.name, m.id));
+  });
+}
+
+function populateTaskKinKiqDropdowns(){
+  const kinSelect = document.getElementById("t-kin");
+  kinSelect.innerHTML = `<option value="">—</option>`;
+  KINS.forEach(kin => kinSelect.appendChild(new Option(`${kin.id} — ${kin.label}`, kin.id)));
+  kinSelect.addEventListener("change", () => updateTaskKiqOptions(kinSelect.value));
+  updateTaskKiqOptions("");
+}
+
+function updateTaskKiqOptions(kinId){
+  const kiqSelect = document.getElementById("t-kiq");
+  kiqSelect.innerHTML = `<option value="">—</option>`;
+  const kin = KINS.find(k => k.id === kinId);
+  (kin ? kin.kiqs : []).forEach(q => kiqSelect.appendChild(new Option(`${q.id} — ${q.label}`, q.id)));
+}
+
+function wireTaskModal(){
+  populateTaskKinKiqDropdowns();
+  document.getElementById("open-add-task").addEventListener("click", () => {
+    if (currentMembers.length === 0) {
+      alert("Add at least one team member first, so there's someone to assign the task to.");
+      return;
+    }
+    document.getElementById("task-modal-overlay").classList.remove("is-hidden");
+  });
+  document.getElementById("close-add-task").addEventListener("click", closeAddTaskModal);
+  document.getElementById("cancel-add-task").addEventListener("click", closeAddTaskModal);
+  document.getElementById("task-modal-overlay").addEventListener("click", (e) => {
+    if (e.target.id === "task-modal-overlay") closeAddTaskModal();
+  });
+  document.getElementById("task-form").addEventListener("submit", submitTask);
+}
+
+function closeAddTaskModal(){
+  document.getElementById("task-modal-overlay").classList.add("is-hidden");
+  document.getElementById("task-form").reset();
+  document.getElementById("task-form-status").textContent = "";
+}
+
+async function submitTask(e){
+  e.preventDefault();
+  const status = document.getElementById("task-form-status");
+  if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
+
+  const record = {
+    title: document.getElementById("t-title").value,
+    assigned_to: document.getElementById("t-assigned-to").value,
+    assigned_by: document.getElementById("t-assigned-by").value,
+    kin: document.getElementById("t-kin").value || null,
+    kiq: document.getElementById("t-kiq").value || null,
+    due_date: document.getElementById("t-due").value || null,
+    status: document.getElementById("t-status").value,
+    created_at: new Date().toISOString(),
+  };
+
+  try {
+    const { error } = await sbClient.from("tasks").insert(record);
+    if (error) throw error;
+    status.textContent = "Assigned.";
+    status.className = "form-status is-success";
+    await loadTasks();
+    setTimeout(closeAddTaskModal, 400);
+  } catch (err) {
+    console.error(err);
+    status.textContent = "Something went wrong: " + (err.message || err);
+    status.className = "form-status is-error";
   }
 }
 

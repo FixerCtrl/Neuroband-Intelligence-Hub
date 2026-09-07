@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Neuroband Intelligence Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -15,17 +15,18 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">N</span>
       <div class="brand-text">
         <span class="brand-name">Neuroband</span>
         <span class="brand-sub">Intelligence Hub</span>
       </div>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">☀️</button>
     </div>
 
     <nav class="nav">
       <button class="nav-item is-active" data-tab="overview">Overview</button>
       <button class="nav-item" data-tab="plan">Collection Plan</button>
       <button class="nav-item" data-tab="repository">Repository</button>
+      <button class="nav-item" data-tab="team">Team</button>
       <button class="nav-item" data-tab="manual">Manual</button>
     </nav>
 
@@ -89,6 +90,27 @@
 
       <div class="card-grid" id="card-grid"></div>
       <p class="empty-state is-hidden" id="empty-state">No entries match yet. Add your first source, or clear your filters.</p>
+    </section>
+
+    <!-- TEAM -->
+    <section class="panel" id="panel-team">
+      <header class="panel-head">
+        <p class="eyebrow">Group workspace</p>
+        <h1>Team</h1>
+      </header>
+
+      <div class="section-subhead">
+        <h2>Members</h2>
+        <button class="btn btn-ghost" id="open-add-member">+ Add member</button>
+      </div>
+      <div class="member-grid" id="member-grid"></div>
+
+      <div class="section-subhead">
+        <h2>Assigned work</h2>
+        <button class="btn btn-primary" id="open-add-task">+ Assign task</button>
+      </div>
+      <div class="task-list" id="task-list"></div>
+      <p class="empty-state is-hidden" id="task-empty-state">No tasks assigned yet.</p>
     </section>
 
     <!-- MANUAL -->
@@ -173,6 +195,84 @@
 <!-- DETAIL / VIEW MODAL -->
 <div class="modal-overlay is-hidden" id="detail-overlay">
   <div class="modal" id="detail-modal"></div>
+</div>
+
+<!-- ADD MEMBER MODAL -->
+<div class="modal-overlay is-hidden" id="member-modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Add a group member</h2>
+      <button class="modal-close" id="close-add-member">&times;</button>
+    </div>
+    <form id="member-form">
+      <label>Name
+        <input type="text" id="m-name" placeholder="e.g. Thandi M." required />
+      </label>
+      <label>Profile picture (optional — you can also add this later by clicking their avatar)
+        <input type="file" id="m-avatar" accept="image/*" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancel-add-member">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-member">Add member</button>
+      </div>
+      <p class="form-status" id="member-form-status"></p>
+    </form>
+  </div>
+</div>
+
+<!-- hidden file input used for re-uploading an existing member's avatar -->
+<input type="file" id="avatar-reupload-input" accept="image/*" class="is-hidden" />
+
+<!-- ADD TASK MODAL -->
+<div class="modal-overlay is-hidden" id="task-modal-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Assign a task</h2>
+      <button class="modal-close" id="close-add-task">&times;</button>
+    </div>
+    <form id="task-form">
+      <label>Task description
+        <input type="text" id="t-title" placeholder="e.g. Collect 3 sources for KIN2_KIQ1" required />
+      </label>
+
+      <div class="field-row">
+        <label>Assigned to
+          <select id="t-assigned-to" required></select>
+        </label>
+        <label>Assigned by
+          <select id="t-assigned-by" required></select>
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label>Related KIN (optional)
+          <select id="t-kin"><option value="">—</option></select>
+        </label>
+        <label>Related KIQ (optional)
+          <select id="t-kiq"><option value="">—</option></select>
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label>Due date
+          <input type="date" id="t-due" />
+        </label>
+        <label>Status
+          <select id="t-status">
+            <option>To do</option>
+            <option>In progress</option>
+            <option>Done</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancel-add-task">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-task">Assign task</button>
+      </div>
+      <p class="form-status" id="task-form-status"></p>
+    </form>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
