@@ -11,7 +11,7 @@
 //    they're used in the file naming convention too.
 // ============================================================
 
-const SUPABASE_URL = "https://pqrwxsuumxrteehtkrnt.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://pqrwxsuumxrteehtkrnt.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e7p5QOSrfHaPDH75YBE8xw_KGAakeGw";
 
 // Your group's Key Intelligence Topic
