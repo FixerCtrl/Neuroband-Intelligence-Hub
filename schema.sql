@@ -1,7 +1,9 @@
 -- ============================================================
 -- NEUROBAND INTELLIGENCE HUB — DATABASE SETUP
--- Run this once in Supabase: Project → SQL Editor → New query
--- → paste this whole file → Run.
+-- Safe to run this whole file again at any point — every
+-- statement below is written so it won't error if the table,
+-- policy, or bucket already exists. Run it in: Supabase →
+-- SQL Editor → New query → paste this whole file → Run.
 -- ============================================================
 
 -- Table: entries (Phase 2/3 — repository, one row per source)
@@ -27,42 +29,7 @@ create table if not exists documents (
   updated_at timestamptz default now()
 );
 
--- ------------------------------------------------------------
--- ROW LEVEL SECURITY
--- This project uses the public "anon" key for a small group
--- project, so we open read/write to anyone with the link/key.
--- This is fine for a class assignment kept on a private URL —
--- it is NOT how you'd configure this for a real company system.
--- ------------------------------------------------------------
-alter table entries enable row level security;
-alter table documents enable row level security;
-
-create policy "Allow all read on entries" on entries for select using (true);
-create policy "Allow all insert on entries" on entries for insert with check (true);
-create policy "Allow all update on entries" on entries for update using (true);
-
-create policy "Allow all read on documents" on documents for select using (true);
-create policy "Allow all insert on documents" on documents for insert with check (true);
-create policy "Allow all update on documents" on documents for update using (true);
-
--- ------------------------------------------------------------
--- STORAGE BUCKET for extract files (PDFs / images)
--- Run this section too — it creates a public bucket called
--- "sources" and opens it the same way as the tables above.
--- ------------------------------------------------------------
-insert into storage.buckets (id, name, public)
-values ('sources', 'sources', true)
-on conflict (id) do nothing;
-
-create policy "Allow all read on sources bucket" on storage.objects
-  for select using (bucket_id = 'sources');
-
-create policy "Allow all upload on sources bucket" on storage.objects
-  for insert with check (bucket_id = 'sources');
-
--- ------------------------------------------------------------
--- TEAM: members (profile pictures) and tasks (work assignment)
--- ------------------------------------------------------------
+-- Table: members (Team tab — profiles + optional avatar)
 create table if not exists members (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -70,6 +37,7 @@ create table if not exists members (
   created_at timestamptz default now()
 );
 
+-- Table: tasks (Team tab — work assignment)
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -82,29 +50,73 @@ create table if not exists tasks (
   created_at timestamptz default now()
 );
 
+-- ------------------------------------------------------------
+-- ROW LEVEL SECURITY
+-- Open read/write for anyone with the anon key — fine for a
+-- small class project on a private URL, not how you'd configure
+-- a system holding real confidential company data.
+-- ------------------------------------------------------------
+alter table entries enable row level security;
+alter table documents enable row level security;
 alter table members enable row level security;
 alter table tasks enable row level security;
 
+drop policy if exists "Allow all read on entries" on entries;
+drop policy if exists "Allow all insert on entries" on entries;
+drop policy if exists "Allow all update on entries" on entries;
+create policy "Allow all read on entries" on entries for select using (true);
+create policy "Allow all insert on entries" on entries for insert with check (true);
+create policy "Allow all update on entries" on entries for update using (true);
+
+drop policy if exists "Allow all read on documents" on documents;
+drop policy if exists "Allow all insert on documents" on documents;
+drop policy if exists "Allow all update on documents" on documents;
+create policy "Allow all read on documents" on documents for select using (true);
+create policy "Allow all insert on documents" on documents for insert with check (true);
+create policy "Allow all update on documents" on documents for update using (true);
+
+drop policy if exists "Allow all read on members" on members;
+drop policy if exists "Allow all insert on members" on members;
+drop policy if exists "Allow all update on members" on members;
+drop policy if exists "Allow all delete on members" on members;
 create policy "Allow all read on members" on members for select using (true);
 create policy "Allow all insert on members" on members for insert with check (true);
 create policy "Allow all update on members" on members for update using (true);
 create policy "Allow all delete on members" on members for delete using (true);
 
+drop policy if exists "Allow all read on tasks" on tasks;
+drop policy if exists "Allow all insert on tasks" on tasks;
+drop policy if exists "Allow all update on tasks" on tasks;
+drop policy if exists "Allow all delete on tasks" on tasks;
 create policy "Allow all read on tasks" on tasks for select using (true);
 create policy "Allow all insert on tasks" on tasks for insert with check (true);
 create policy "Allow all update on tasks" on tasks for update using (true);
 create policy "Allow all delete on tasks" on tasks for delete using (true);
 
--- Storage bucket for member profile pictures
+-- ------------------------------------------------------------
+-- STORAGE BUCKETS
+-- ------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('sources', 'sources', true)
+on conflict (id) do nothing;
+
 insert into storage.buckets (id, name, public)
 values ('avatars', 'avatars', true)
 on conflict (id) do nothing;
 
+drop policy if exists "Allow all read on sources bucket" on storage.objects;
+drop policy if exists "Allow all upload on sources bucket" on storage.objects;
+create policy "Allow all read on sources bucket" on storage.objects
+  for select using (bucket_id = 'sources');
+create policy "Allow all upload on sources bucket" on storage.objects
+  for insert with check (bucket_id = 'sources');
+
+drop policy if exists "Allow all read on avatars bucket" on storage.objects;
+drop policy if exists "Allow all upload on avatars bucket" on storage.objects;
+drop policy if exists "Allow all update on avatars bucket" on storage.objects;
 create policy "Allow all read on avatars bucket" on storage.objects
   for select using (bucket_id = 'avatars');
-
 create policy "Allow all upload on avatars bucket" on storage.objects
   for insert with check (bucket_id = 'avatars');
-
 create policy "Allow all update on avatars bucket" on storage.objects
   for update using (bucket_id = 'avatars');
