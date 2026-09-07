@@ -56,7 +56,7 @@ RULES FOR UPDATING THE SYSTEM
 Edit this block directly — it's saved to your Supabase project as soon as you hit Save.`
 };
 
-let supabase = null;
+let sbClient = null;
 let currentEntries = [];
 
 // ---------- INIT ----------
@@ -82,7 +82,7 @@ function initSupabase(){
     return;
   }
   try {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     dot.classList.add("is-live");
     label.textContent = "Connected";
   } catch (e) {
@@ -148,8 +148,8 @@ function toggleEdit(slug, editing){
 async function loadDocument(slug){
   const viewEl = document.getElementById("view-" + slug);
   let content = DEFAULT_DOCS[slug];
-  if (supabase) {
-    const { data, error } = await supabase.from("documents").select("content").eq("slug", slug).maybeSingle();
+  if (sbClient) {
+    const { data, error } = await sbClient.from("documents").select("content").eq("slug", slug).maybeSingle();
     if (!error && data) content = data.content;
   }
   viewEl.textContent = content;
@@ -161,8 +161,8 @@ async function saveDocument(slug){
   document.getElementById("view-" + slug).textContent = newContent;
   document.getElementById("view-" + slug).dataset.raw = newContent;
   toggleEdit(slug, false);
-  if (supabase) {
-    await supabase.from("documents").upsert({ slug, content: newContent, updated_at: new Date().toISOString() });
+  if (sbClient) {
+    await sbClient.from("documents").upsert({ slug, content: newContent, updated_at: new Date().toISOString() });
   }
 }
 
@@ -234,8 +234,8 @@ function wireFilters(){
 
 // ---------- REPOSITORY: load / render ----------
 async function loadEntries(){
-  if (!supabase) { renderEntries(); return; }
-  const { data, error } = await supabase.from("entries").select("*").order("created_at", { ascending: false });
+  if (!sbClient) { renderEntries(); return; }
+  const { data, error } = await sbClient.from("entries").select("*").order("created_at", { ascending: false });
   if (!error && data) currentEntries = data;
   document.getElementById("entry-count").textContent = `${currentEntries.length} ${currentEntries.length === 1 ? "entry" : "entries"} stored`;
   renderEntries();
@@ -308,8 +308,8 @@ function openDetail(entry){
 function closeDetail(){ document.getElementById("detail-overlay").classList.add("is-hidden"); }
 
 function getPublicFileUrl(path){
-  if (!path || !supabase) return null;
-  const { data } = supabase.storage.from("sources").getPublicUrl(path);
+  if (!path || !sbClient) return null;
+  const { data } = sbClient.storage.from("sources").getPublicUrl(path);
   return data ? data.publicUrl : null;
 }
 
@@ -342,7 +342,7 @@ async function submitEntry(e){
   const status = document.getElementById("form-status");
   const submitBtn = document.getElementById("submit-entry");
 
-  if (!supabase) {
+  if (!sbClient) {
     status.textContent = "Not connected to Supabase yet — check config.js.";
     status.className = "form-status is-error";
     return;
@@ -357,7 +357,7 @@ async function submitEntry(e){
   const fileName = buildFileName();
 
   try {
-    const { error: uploadError } = await supabase.storage.from("sources").upload(fileName, file, { upsert: true });
+    const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file, { upsert: true });
     if (uploadError) throw uploadError;
 
     const record = {
@@ -374,7 +374,7 @@ async function submitEntry(e){
       created_at: new Date().toISOString(),
     };
 
-    const { error: insertError } = await supabase.from("entries").insert(record);
+    const { error: insertError } = await sbClient.from("entries").insert(record);
     if (insertError) throw insertError;
 
     status.textContent = "Saved.";
