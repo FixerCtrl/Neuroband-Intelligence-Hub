@@ -11,8 +11,8 @@
 //    they're used in the file naming convention too.
 // ============================================================
 
-const SUPABASE_URL = "PASTE_YOUR_SUPABASE_PROJECT_URL_HERE";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+const SUPABASE_URL = "https://pqrwxsuumxrteehtkrnt.supabase.co";
+const SUPABASE_ANON_KEY = "https://pqrwxsuumxrteehtkrnt.supabase.co";
 
 // Your group's Key Intelligence Topic
 const KIT = "How should Neuroband position its next wearable device against established competitors over the next 18 months?";
