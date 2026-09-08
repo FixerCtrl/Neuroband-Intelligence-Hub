@@ -17,6 +17,21 @@
   --avatar-bg: #E4E4E4;
   --shadow-modal: rgba(0,0,0,0.35);
 
+  /* ---------- BACKGROUND PHOTO (edit this to add your own image) ----------
+     Leave as `none` for a flat color background. To add a photo:
+     1. Put your image file in an `images/` folder in your repo
+        (e.g. images/hero-bg.jpg).
+     2. Replace the line below with something like:
+          --bg-photo: linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.88)), url("images/hero-bg.jpg");
+        The white gradient on top is a "wash" that dims the photo so
+        black text stays readable — raise 0.88 toward 1 for a fainter
+        photo, lower it toward 0.5 for a more visible one.
+     3. Do the same inside the html[data-theme="dark"] block below,
+        but use rgba(0,0,0, ...) instead of rgba(255,255,255, ...) so
+        the wash matches dark mode.
+  ------------------------------------------------------------------------ */
+  --bg-photo: none;
+
   --radius-s: 4px;
   --radius-m: 8px;
   --font-sans: "Ubuntu", sans-serif;
@@ -41,13 +56,18 @@ html[data-theme="dark"]{
   --danger: #E27C72;
   --avatar-bg: #232323;
   --shadow-modal: rgba(0,0,0,0.75);
+  --bg-photo: none; /* same idea as above, but for dark mode — use a black-tinted wash */
 }
 
 *{ box-sizing: border-box; }
 
 html, body{
   margin:0; padding:0;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--bg-photo);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 15px;
@@ -74,10 +94,6 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
   top:0;
   height:100vh;
   overflow:hidden;
-}
-.sidebar-motif{
-  position:absolute; bottom:-40px; left:-30px; width:200px; height:auto;
-  color: var(--accent); opacity:0.06; pointer-events:none;
 }
 
 .brand{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 40px; gap:10px; }
@@ -139,12 +155,6 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 }
 
 .panel-head{ margin-bottom: 32px; }
-.panel-head-hero{ position:relative; padding-top:8px; }
-.hero-motif{
-  position:absolute; top:-30px; right:-10px; width:260px; height:auto;
-  color: var(--accent); opacity:0.14; pointer-events:none; z-index:0;
-}
-.panel-head-hero > *:not(.hero-motif){ position:relative; z-index:1; }
 .panel-head-row{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
 .eyebrow{ color: var(--accent-ink); font-size: 12.5px; font-weight:700; margin: 0 0 6px; letter-spacing:0.02em; }
 .panel-head h1{ font-family: var(--font-sans); font-weight:700; font-size: 30px; margin:0; max-width: 720px; }
