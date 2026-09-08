@@ -432,7 +432,7 @@ body::before{
   .shell{ flex-direction:column; }
   .sidebar{ width:100%; height:auto; position:relative; flex-direction:row; align-items:center; gap:20px; padding:16px 20px; }
   .brand{ margin-bottom:0; }
-  .nav{ flex-direction:row; flex-grow:0; flex-wrap:wrap; }
+  .nav{ flex-direction:column; flex-grow:1; width:100%; }
   .sidebar-status{ display:none; }
   .main{ padding: 28px 20px; }
   .field-row{ grid-template-columns: 1fr; }
