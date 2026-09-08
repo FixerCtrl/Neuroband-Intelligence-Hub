@@ -391,6 +391,9 @@ html[data-theme="dark"] .notification-icon{ color:#fff; }
   .mobile-sidebar-close{ display:block; border:0; background:none; color:var(--text-muted); font-size:26px; line-height:1; cursor:pointer; padding:2px 4px; }
   .brand{ margin-bottom:8px; width:100%; }
   .brand .theme-toggle{ margin-left:auto; }
+  .brand .notification-toggle{ width:34px; height:34px; flex:0 0 34px; margin-left:auto; padding:0; color:var(--text); }
+  .brand .notification-icon{ color:#000; font-size:14px; }
+  html[data-theme="dark"] .brand .notification-icon{ color:#fff; }
   .nav{ display:flex; flex-direction:column; gap:4px; width:100%; }
   .nav-item{ min-height:42px; padding:9px 10px; font-size:13px; }
   .auth-box{ margin-top:0; }
