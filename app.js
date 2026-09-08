@@ -69,6 +69,7 @@ let currentEntries = [];
 let currentMembers = [];
 let currentTasks = [];
 let currentTaskComments = [];
+let currentTaskView = "mine";
 let currentUser = null;
 let currentActivity = [];
 
@@ -92,6 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireModal();
   wireMemberModal();
   wireTaskModal();
+  wireTaskViews();
   wireAuthModal();
   wireNotifications();
   populateFormDropdowns();
@@ -184,13 +186,17 @@ function wireNotifications(){
     renderNotifications();
   });
   markRead.addEventListener("click", () => {
-    const latestNotification = [...currentActivity, ...currentTaskComments].reduce((latest, item) => {
+    const latestNotification = [...currentActivity, ...currentTaskComments, ...currentTasks].reduce((latest, item) => {
       const createdAt = new Date(item.created_at).getTime();
       return Number.isFinite(createdAt) && createdAt > latest ? createdAt : latest;
     }, 0);
-    localStorage.setItem("nb-notifications-seen", new Date(latestNotification || Date.now()).toISOString());
+    localStorage.setItem(notificationSeenStorageKey(), new Date(latestNotification || Date.now()).toISOString());
     renderNotifications();
   });
+}
+
+function notificationSeenStorageKey(){
+  return currentUser ? `nb-notifications-seen-${currentUser.id}` : "nb-notifications-seen";
 }
 
 function notificationDateKey(isoString){
@@ -214,18 +220,21 @@ function renderNotifications(){
   const list = safeId("notification-list");
   const count = safeId("notification-count");
   if (!list || !count) return;
-  const seenAt = new Date(localStorage.getItem("nb-notifications-seen") || 0).getTime();
+  const seenAt = new Date(localStorage.getItem(notificationSeenStorageKey()) || 0).getTime();
+  const mine = myMemberProfile();
+  const taskAssignments = currentTasks
+    .filter(task => currentUser && mine && task.assigned_to === mine.id)
+    .map(task => ({ ...task, action: "New task assigned", details: task.title }));
   const taskNotifications = currentTaskComments
     .filter(comment => {
       const task = currentTasks.find(item => String(item.id) === String(comment.task_id));
-      const mine = myMemberProfile();
       return currentUser && mine && comment.author_id !== mine.id && task && (task.assigned_to === mine.id || task.assigned_by === mine.id || isAdminEmail(currentUser.email));
     })
     .map(comment => {
       const task = currentTasks.find(item => String(item.id) === String(comment.task_id));
       return { ...comment, action: `Comment on ${task ? task.title : "assigned task"}`, details: comment.body };
     });
-  const notifications = [...currentActivity, ...taskNotifications].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const notifications = [...currentActivity, ...taskAssignments, ...taskNotifications].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const recent = notifications.slice(0, 8);
   const unread = notifications.filter(item => new Date(item.created_at).getTime() > seenAt).length;
   count.textContent = unread > 9 ? "9+" : String(unread);
@@ -1077,14 +1086,121 @@ function taskComments(taskId){
   return currentTaskComments.filter(comment => String(comment.task_id) === String(taskId));
 }
 
+function taskHasNewComment(task, seenAt){
+  const mine = myMemberProfile();
+  return taskComments(task.id).some(comment => comment.author_id !== mine?.id && new Date(comment.created_at).getTime() > seenAt);
+}
+
+function taskDueLabel(task){
+  if (!task.due_date) return "No due date";
+  const due = new Date(`${task.due_date}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((due - today) / 86400000);
+  if (days < 0) return `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"}`;
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due ${task.due_date}`;
+}
+
+function taskNeedsAttention(task){
+  const mine = myMemberProfile();
+  if (!mine || task.assigned_to !== mine.id || task.status === "Done") return false;
+  const seenAt = new Date(localStorage.getItem(notificationSeenStorageKey()) || 0).getTime();
+  return new Date(task.created_at).getTime() > seenAt || taskHasNewComment(task, seenAt) || taskDueLabel(task).startsWith("Overdue");
+}
+
+function wireTaskViews(){
+  document.querySelectorAll("[data-task-view]").forEach(button => {
+    button.addEventListener("click", () => {
+      currentTaskView = button.dataset.taskView;
+      document.querySelectorAll("[data-task-view]").forEach(viewButton => {
+        const isActive = viewButton === button;
+        viewButton.classList.toggle("is-active", isActive);
+        viewButton.setAttribute("aria-selected", String(isActive));
+      });
+      renderTasks();
+    });
+  });
+}
+
+function renderMyWork(){
+  const list = document.getElementById("my-work-list");
+  const counts = document.getElementById("my-work-counts");
+  const empty = document.getElementById("my-work-empty");
+  if (!list || !counts || !empty) return;
+
+  const mine = myMemberProfile();
+  if (!currentUser || !mine) {
+    counts.innerHTML = `<span class="work-count">Sign in to see your tasks</span>`;
+    list.innerHTML = `<div class="my-work-signin">Your personal task dashboard will appear here once you sign in and claim your team profile.</div>`;
+    empty.classList.add("is-hidden");
+    return;
+  }
+
+  const seenAt = new Date(localStorage.getItem(notificationSeenStorageKey()) || 0).getTime();
+  const assignedTasks = currentTasks.filter(task => task.assigned_to === mine.id);
+  const openTasks = assignedTasks.filter(task => task.status !== "Done");
+  const dueSoon = openTasks.filter(task => {
+    if (!task.due_date) return false;
+    const days = (new Date(`${task.due_date}T00:00:00`) - new Date(new Date().toDateString())) / 86400000;
+    return days >= 0 && days <= 7;
+  }).length;
+  const needsAttention = openTasks.filter(task => new Date(task.created_at).getTime() > seenAt || taskHasNewComment(task, seenAt)).length;
+  counts.innerHTML = `
+    <span class="work-count"><strong>${openTasks.length}</strong> open</span>
+    <span class="work-count"><strong>${dueSoon}</strong> due soon</span>
+    ${needsAttention ? `<span class="work-count work-count-alert"><strong>${needsAttention}</strong> new</span>` : ""}
+  `;
+  empty.classList.toggle("is-hidden", openTasks.length !== 0);
+  list.innerHTML = openTasks.length ? [...openTasks].sort((a, b) => {
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return a.due_date.localeCompare(b.due_date);
+  }).map(task => {
+    const isNewAssignment = new Date(task.created_at).getTime() > seenAt;
+    const hasNewMessage = taskHasNewComment(task, seenAt);
+    const badges = [
+      isNewAssignment ? `<span class="work-badge work-badge-new">New assignment</span>` : "",
+      hasNewMessage ? `<span class="work-badge work-badge-message">New message</span>` : ""
+    ].join("");
+    return `
+      <article class="my-work-item${isNewAssignment || hasNewMessage ? " is-attention" : ""}" data-focus-task-id="${task.id}">
+        <div class="my-work-item-main">
+          <div class="my-work-item-title"><strong>${escapeHtml(task.title)}</strong>${badges}</div>
+          <div class="my-work-item-meta"><span class="task-status-text ${statusClass(task.status)}">${escapeHtml(task.status)}</span><span class="my-work-due ${task.due_date && taskDueLabel(task).startsWith("Overdue") ? "is-overdue" : ""}">${escapeHtml(taskDueLabel(task))}</span></div>
+        </div>
+        <span class="my-work-open">Open task <span aria-hidden="true">→</span></span>
+      </article>
+    `;
+  }).join("") : "";
+
+  list.querySelectorAll("[data-focus-task-id]").forEach(item => {
+    item.addEventListener("click", () => {
+      const taskCard = document.querySelector(`[data-task-card-id="${item.dataset.focusTaskId}"]`);
+      taskCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+      taskCard?.classList.add("is-focused");
+      setTimeout(() => taskCard?.classList.remove("is-focused"), 1400);
+    });
+  });
+}
+
 function renderTasks(){
+  renderMyWork();
   const list = document.getElementById("task-list");
   list.innerHTML = "";
-  document.getElementById("task-empty-state").classList.toggle("is-hidden", currentTasks.length !== 0);
+  const mine = myMemberProfile();
+  const visibleTasks = currentTaskView === "all"
+    ? currentTasks
+    : currentTasks.filter(task => task.assigned_to === mine?.id && (currentTaskView === "mine" || taskNeedsAttention(task)));
+  const emptyState = document.getElementById("task-empty-state");
+  emptyState.textContent = currentTaskView === "attention" ? "Nothing needs your attention right now." : currentTaskView === "mine" ? "No tasks are assigned to you." : "No tasks assigned yet.";
+  emptyState.classList.toggle("is-hidden", visibleTasks.length !== 0);
 
-  currentTasks.forEach(t => {
+  visibleTasks.forEach(t => {
     const card = document.createElement("div");
     card.className = "task-card";
+    card.dataset.taskCardId = t.id;
     const canEditStatus = canChangeTaskStatus(t);
     const canReassign = canManageLeadership();
     const comments = taskComments(t.id);

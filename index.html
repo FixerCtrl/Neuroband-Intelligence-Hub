@@ -146,6 +146,18 @@
 
       <div id="your-profile-slot"></div>
 
+      <section class="my-work" aria-labelledby="my-work-title">
+        <div class="my-work-head">
+          <div>
+            <p class="eyebrow">Personal dashboard</p>
+            <h2 id="my-work-title">My work</h2>
+          </div>
+          <div class="my-work-counts" id="my-work-counts"></div>
+        </div>
+        <div class="my-work-list" id="my-work-list"></div>
+        <p class="empty-state is-hidden" id="my-work-empty">You have no open tasks right now.</p>
+      </section>
+
       <div class="section-subhead">
         <h2>Members</h2>
         <button class="btn btn-ghost" id="open-add-member">+ Add member</button>
@@ -155,6 +167,11 @@
       <div class="section-subhead">
         <h2>Assigned work</h2>
         <button class="btn btn-primary" id="open-add-task">+ Assign task</button>
+      </div>
+      <div class="task-view-controls" role="tablist" aria-label="Task views">
+        <button class="task-view-btn is-active" type="button" role="tab" aria-selected="true" data-task-view="mine">My tasks</button>
+        <button class="task-view-btn" type="button" role="tab" aria-selected="false" data-task-view="attention">Needs attention</button>
+        <button class="task-view-btn" type="button" role="tab" aria-selected="false" data-task-view="all">All tasks</button>
       </div>
       <div class="task-list" id="task-list"></div>
       <p class="empty-state is-hidden" id="task-empty-state">No tasks assigned yet.</p>
