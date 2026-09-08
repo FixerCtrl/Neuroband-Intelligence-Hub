@@ -247,6 +247,8 @@ body::before{
 .btn-small{ padding: 5px 10px; font-size:12px; }
 .btn-danger-ghost{ background:transparent; border:1px solid var(--border); color: var(--danger); }
 .btn-danger-ghost:hover{ border-color: var(--danger); }
+.repository-add-btn{ min-height:32px; padding:0 14px; display:inline-flex; align-items:center; justify-content:center; background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent); white-space:nowrap; }
+.repository-add-btn:hover{ background:var(--accent-dim); color:var(--accent-ink); border-color:var(--accent-ink); opacity:1; }
 
 /* ---------- REPOSITORY ---------- */
 .filter-bar{ display:flex; gap:10px; margin-bottom:26px; padding:16px; flex-wrap:wrap; border:1px solid var(--border-soft); border-radius:var(--radius-m); background:var(--surface); box-shadow:0 7px 18px rgba(56, 53, 48, 0.06); }
@@ -268,6 +270,8 @@ body::before{
 .entry-source{ font-family: var(--font-sans); font-size: 16px; font-weight:700; margin:0; }
 .entry-meta{ font-size:12px; color: var(--text-muted); font-family: var(--font-sans); }
 .entry-relevance{ font-size: 13px; color: var(--text-muted); }
+.entry-actions{ display:flex; justify-content:flex-end; margin-top:auto; padding-top:4px; }
+.entry-delete{ min-height:32px; }
 
 .empty-state{ color: var(--text-faint); text-align:center; padding: 60px 0; }
 .is-hidden{ display:none !important; }

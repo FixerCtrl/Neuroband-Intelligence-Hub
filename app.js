@@ -680,9 +680,27 @@ function renderEntries(){
       <p class="entry-source">${escapeHtml(e.source)}</p>
       <div class="entry-meta">${escapeHtml(e.author)} · ${e.date_published || "—"} · ${escapeHtml(e.source_type)}</div>
       <div class="entry-relevance">${escapeHtml(truncate(e.relevance, 110))}</div>
+      ${canManageLeadership() ? `<div class="entry-actions"><button class="btn btn-danger-ghost btn-small entry-delete" data-entry-id="${e.id}">Delete entry</button></div>` : ""}
     `;
     card.addEventListener("click", () => openDetail(e));
     grid.appendChild(card);
+  });
+
+  grid.querySelectorAll(".entry-delete").forEach(button => {
+    button.addEventListener("click", async event => {
+      event.stopPropagation();
+      const entry = currentEntries.find(item => String(item.id) === String(button.dataset.entryId));
+      if (!entry || !canManageLeadership()) return;
+      if (!confirm(`Delete the repository entry "${entry.source}"?`)) return;
+      const { error } = await sbClient.from("entries").delete().eq("id", entry.id);
+      if (error) {
+        alert("Could not delete entry: " + error.message);
+        return;
+      }
+      if (entry.file_path) await sbClient.storage.from("sources").remove([entry.file_path]);
+      logActivity("deleted a repository entry", entry.source);
+      await loadEntries();
+    });
   });
 }
 
