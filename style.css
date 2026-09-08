@@ -146,10 +146,13 @@ body::before{
   font-size: 14px;
   line-height:1.35;
   border:1px solid transparent;
-  transition: color .2s ease, background-color .2s ease, border-color .2s ease;
+  appearance:none;
+  -webkit-appearance:none;
+  -webkit-tap-highlight-color:transparent;
+  transition: color .2s ease, background-color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
-.nav-item:hover{ color:var(--text); background:var(--bg); border-color:var(--border-soft); }
-.nav-item.is-active{ color:var(--text); border-color:var(--border-soft); background:var(--surface-raised); font-weight:700; box-shadow:0 3px 10px rgba(52, 47, 40, 0.05); }
+.nav-item:hover, .nav-item:focus-visible, .nav-item:active{ color:var(--text); background:var(--bg); border-color:var(--border-soft); box-shadow:0 4px 12px rgba(52, 47, 40, 0.08); transform:translateX(2px); outline:none; }
+.nav-item.is-active{ color:var(--text); border-color:var(--border-soft); background:var(--surface-raised); font-weight:700; box-shadow:0 4px 12px rgba(52, 47, 40, 0.08); }
 
 .sidebar-status{ border-top:1px solid var(--border-soft); padding-top:16px; font-size:12.5px; }
 .status-row{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
