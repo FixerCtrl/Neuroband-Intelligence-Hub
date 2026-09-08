@@ -84,6 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireMemberModal();
   wireTaskModal();
   wireAuthModal();
+  wireNotifications();
   populateFormDropdowns();
   loadDocument("collection_plan");
   loadDocument("manual");
@@ -160,6 +161,39 @@ function renderAuthBox(){
   document.getElementById("sign-out-btn").addEventListener("click", async () => {
     await sbClient.auth.signOut();
   });
+}
+
+function wireNotifications(){
+  const toggle = safeId("notification-toggle");
+  const markRead = safeId("notification-mark-read");
+  if (!toggle || !markRead) return;
+  toggle.addEventListener("click", () => {
+    const panel = safeId("notification-panel");
+    if (panel) panel.classList.toggle("is-hidden");
+    renderNotifications();
+  });
+  markRead.addEventListener("click", () => {
+    localStorage.setItem("nb-notifications-seen", new Date().toISOString());
+    renderNotifications();
+  });
+}
+
+function renderNotifications(){
+  const list = safeId("notification-list");
+  const count = safeId("notification-count");
+  if (!list || !count) return;
+  const seenAt = new Date(localStorage.getItem("nb-notifications-seen") || 0).getTime();
+  const recent = currentActivity.slice(0, 8);
+  const unread = currentActivity.filter(item => new Date(item.created_at).getTime() > seenAt).length;
+  count.textContent = unread > 9 ? "9+" : String(unread);
+  count.classList.toggle("is-hidden", unread === 0);
+  list.innerHTML = recent.length ? recent.map(item => `
+    <div class="notification-item">
+      <strong>${escapeHtml(item.action)}</strong>
+      ${item.details ? `<span>${escapeHtml(item.details)}</span>` : ""}
+      <small>${relativeTime(item.created_at)}</small>
+    </div>
+  `).join("") : `<p class="notification-empty">No activity yet.</p>`;
 }
 
 // Call this at the top of anything that writes to the database.
@@ -1192,6 +1226,8 @@ function renderActivity(){
     list.appendChild(item);
   });
 
+  renderNotifications();
+
   list.querySelectorAll("[data-edit-activity-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!canManageActivities()) return;
@@ -1249,8 +1285,19 @@ function initRealtime(){
     .subscribe();
 
   sbClient.channel("public:activity_log")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, () => loadActivity())
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, (payload) => {
+      loadActivity();
+      if (payload.new && currentUser && payload.new.actor_email !== currentUser.email) showActivityToast(payload.new);
+    })
     .subscribe();
+}
+
+function showActivityToast(activity){
+  const toast = document.createElement("div");
+  toast.className = "activity-toast";
+  toast.textContent = `${activity.actor_email || "A teammate"} ${activity.action}`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4200);
 }
 
 // ---------- UTIL ----------

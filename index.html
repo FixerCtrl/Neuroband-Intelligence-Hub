@@ -22,6 +22,9 @@
         <span class="brand-name">Insight Consulting</span>
         <span class="brand-sub">Neuroband Intelligence Hub</span>
       </div>
+      <button class="notification-toggle" id="notification-toggle" aria-label="Open notifications" title="Notifications">
+        <span aria-hidden="true">&#128276;</span><span class="notification-count is-hidden" id="notification-count">0</span>
+      </button>
       <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">☾</button>
       <button class="mobile-sidebar-close" id="mobile-sidebar-close" aria-label="Close navigation">&times;</button>
     </div>
@@ -38,6 +41,11 @@
 
     <div class="auth-box" id="auth-box">
       <button class="btn btn-ghost btn-small" id="open-auth" style="width:100%;">Sign in</button>
+    </div>
+
+    <div class="notification-panel is-hidden" id="notification-panel">
+      <div class="notification-panel-head"><strong>Notifications</strong><button class="notification-mark-read" id="notification-mark-read">Mark read</button></div>
+      <div id="notification-list"></div>
     </div>
 
     <div class="sidebar-status">

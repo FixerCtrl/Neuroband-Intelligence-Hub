@@ -113,6 +113,20 @@ body::before{
   font-size:14px; font-weight:700; font-family: var(--font-sans); color: var(--text);
 }
 .theme-toggle:hover{ border-color: var(--accent); }
+.notification-toggle{ position:relative; border:1px solid var(--border); background:var(--surface-raised); color:var(--text); border-radius:50%; width:34px; height:34px; cursor:pointer; font-size:15px; }
+.notification-toggle:hover{ border-color:var(--accent); }
+.notification-count{ position:absolute; top:-5px; right:-5px; min-width:16px; height:16px; padding:0 3px; border-radius:99px; background:var(--danger); color:#fff; font:700 10px/16px var(--font-sans); }
+.notification-panel{ position:absolute; top:76px; left:16px; right:16px; z-index:20; border:1px solid var(--border); border-radius:var(--radius-m); background:var(--surface-raised); box-shadow:0 10px 26px rgba(35, 34, 31, 0.14); overflow:hidden; }
+.notification-panel-head{ display:flex; justify-content:space-between; gap:8px; padding:11px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
+.notification-mark-read{ border:0; background:none; color:var(--accent-ink); cursor:pointer; font:700 11px var(--font-sans); }
+.notification-item{ padding:10px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
+.notification-item:last-child{ border-bottom:0; }
+.notification-item strong, .notification-item span, .notification-item small{ display:block; }
+.notification-item span{ color:var(--text-muted); margin-top:2px; }
+.notification-item small{ color:var(--text-faint); font:11px var(--font-mono); margin-top:4px; }
+.notification-empty{ color:var(--text-faint); font-size:12px; padding:12px; margin:0; }
+.activity-toast{ position:fixed; right:24px; bottom:24px; z-index:200; max-width:320px; padding:12px 15px; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:var(--radius-m); background:var(--surface-raised); color:var(--text); box-shadow:0 10px 24px rgba(35, 34, 31, 0.16); font-size:13px; animation:toast-in 0.2s ease; }
+@keyframes toast-in{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:translateY(0); } }
 
 .nav{ display:flex; flex-direction:column; gap:2px; flex-grow:1; }
 .nav-item{
