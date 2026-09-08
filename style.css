@@ -115,6 +115,7 @@ body::before{
 .theme-toggle:hover, .notification-toggle:hover{ border-color:var(--accent); }
 .notification-toggle{ position:relative; flex:0 0 34px; aspect-ratio:1; }
 .notification-icon{ display:block; width:16px; height:16px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; color:var(--text); }
+.theme-icon{ display:block; width:16px; height:16px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; color:var(--text); }
 .notification-count{ position:absolute; top:-5px; right:-5px; min-width:16px; height:16px; padding:0 3px; border-radius:99px; background:var(--danger); color:#fff; font:700 10px/16px var(--font-sans); }
 .notification-panel{ position:absolute; top:76px; left:16px; right:16px; z-index:20; border:1px solid var(--border); border-radius:var(--radius-m); background:var(--surface-raised); box-shadow:0 10px 26px rgba(35, 34, 31, 0.14); overflow:hidden; }
 .notification-panel-head{ display:flex; justify-content:space-between; gap:8px; padding:11px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
