@@ -62,3 +62,10 @@ const SOURCE_TYPES = [
 
 // Used to build suggested file names, e.g. NEUROBAND
 const PROJECT_TAG = "NEUROBAND";
+
+// Only the admin account(s) have elevated permissions.
+// Everyone else is treated as a regular user.
+const ADMIN_EMAILS = [
+  "fixerctrl@gmail.com",
+  "mlungisimash27@gmail.com",
+];

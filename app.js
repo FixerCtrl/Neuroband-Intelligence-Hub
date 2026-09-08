@@ -63,6 +63,12 @@ let currentTasks = [];
 let currentUser = null;
 let currentActivity = [];
 
+function safeId(id){
+  const el = document.getElementById(id);
+  if (!el) console.warn(`Missing DOM element: #${id}`);
+  return el;
+}
+
 // ---------- INIT ----------
 document.addEventListener("DOMContentLoaded", () => {
   initTheme();
@@ -93,6 +99,14 @@ function isAdminEmail(email){
   return !!email && ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email.toLowerCase());
 }
 
+function canManageLeadership(){
+  return !!currentUser && isAdminEmail(currentUser.email);
+}
+
+function canFinalSay(){
+  return canManageLeadership();
+}
+
 async function initAuth(){
   if (!sbClient) { renderAuthBox(); return; }
 
@@ -102,17 +116,27 @@ async function initAuth(){
 
   sbClient.auth.onAuthStateChange((_event, session) => {
     currentUser = session ? session.user : null;
-    renderAuthBox();
-    renderMembers();   // re-show/hide admin-only controls
+    refreshIdentityUI();
     renderEntries();
   });
 }
 
+// Update every identity-dependent view immediately after authentication changes.
+// The auth state event is useful as a fallback, but it is not guaranteed to run
+// before the sign-in form needs to reflect the newly authenticated user.
+function refreshIdentityUI(){
+  renderAuthBox();
+  renderMembers();   // re-show/hide admin-only controls and refresh the profile card
+}
+
 function renderAuthBox(){
-  const box = document.getElementById("auth-box");
+  const box = safeId("auth-box");
+  if (!box) return;
+
   if (!currentUser) {
     box.innerHTML = `<button class="btn btn-ghost btn-small" id="open-auth" style="width:100%;">Sign in</button>`;
-    document.getElementById("open-auth").addEventListener("click", openAuthModal);
+    const signInBtn = safeId("open-auth");
+    if (signInBtn) signInBtn.addEventListener("click", openAuthModal);
     return;
   }
   const admin = isAdminEmail(currentUser.email);
@@ -222,7 +246,9 @@ async function submitAuth(e){
 function initTheme(){
   const saved = localStorage.getItem("nb-theme") || "light";
   applyTheme(saved);
-  document.getElementById("theme-toggle").addEventListener("click", () => {
+  const toggle = safeId("theme-toggle");
+  if (!toggle) return;
+  toggle.addEventListener("click", () => {
     const current = document.documentElement.getAttribute("data-theme") || "light";
     const next = current === "light" ? "dark" : "light";
     applyTheme(next);
@@ -232,14 +258,16 @@ function initTheme(){
 
 function applyTheme(theme){
   document.documentElement.setAttribute("data-theme", theme);
-  const btn = document.getElementById("theme-toggle");
+  const btn = safeId("theme-toggle");
+  if (!btn) return;
   btn.textContent = theme === "light" ? "☾" : "☀";
   btn.title = theme === "light" ? "Switch to dark mode" : "Switch to light mode";
 }
 
 function initSupabase(){
-  const dot = document.getElementById("conn-dot");
-  const label = document.getElementById("conn-label");
+  const dot = safeId("conn-dot");
+  const label = safeId("conn-label");
+  if (!dot || !label) return;
   if (!SUPABASE_URL || SUPABASE_URL.includes("PASTE_YOUR")) {
     dot.classList.add("is-error");
     label.textContent = "Not connected — edit config.js";
@@ -287,13 +315,19 @@ function renderOverview(){
 // ---------- DOCUMENT BLOCKS (Collection Plan / Manual) ----------
 function wireDocBlocks(){
   document.querySelectorAll("[data-edit]").forEach(btn => {
-    btn.addEventListener("click", () => toggleEdit(btn.dataset.edit, true));
+    btn.addEventListener("click", () => {
+      if (!requireAuth()) return;
+      toggleEdit(btn.dataset.edit, true);
+    });
   });
   document.querySelectorAll("[data-cancel]").forEach(btn => {
     btn.addEventListener("click", () => toggleEdit(btn.dataset.cancel, false));
   });
   document.querySelectorAll("[data-save]").forEach(btn => {
-    btn.addEventListener("click", () => saveDocument(btn.dataset.save));
+    btn.addEventListener("click", () => {
+      if (!requireAuth()) return;
+      saveDocument(btn.dataset.save);
+    });
   });
 }
 
@@ -328,7 +362,7 @@ async function saveDocument(slug){
   toggleEdit(slug, false);
   if (sbClient) {
     await sbClient.from("documents").upsert({ slug, content: newContent, updated_at: new Date().toISOString() });
-    logActivity("edited the " + (slug === "manual" ? "Manual" : "Collection Plan"));
+    logActivity("updated the " + (slug === "manual" ? "Manual" : "Collection Plan"));
   }
 }
 
@@ -579,14 +613,14 @@ function initials(name){
 function renderMembers(){
   const grid = document.getElementById("member-grid");
   grid.innerHTML = "";
-  const isAdmin = currentUser && isAdminEmail(currentUser.email);
+  const canModerate = canManageLeadership();
   currentMembers.forEach(m => {
     const card = document.createElement("div");
     card.className = "member-card";
     const avatarUrl = getPublicAvatarUrl(m.avatar_path);
-    const canEditPhoto = currentUser && (m.user_id === currentUser.id || isAdmin);
+    const canEditPhoto = currentUser && (m.user_id === currentUser.id || canModerate);
     card.innerHTML = `
-      ${isAdmin ? `<button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>` : ""}
+      ${canModerate ? `<button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>` : ""}
       <div class="member-avatar" ${canEditPhoto ? `data-avatar-for="${m.id}" title="Click to change photo"` : ""} style="${canEditPhoto ? "" : "cursor:default;"}">
         ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
       </div>
@@ -786,6 +820,10 @@ async function handleAvatarReupload(e){
 
 async function removeMember(memberId){
   if (!requireAuth()) return;
+  if (!canManageLeadership()) {
+    alert("Only the admin can remove members.");
+    return;
+  }
   if (!confirm("Remove this member? Tasks assigned to them will remain but show as unassigned.")) return;
   const member = currentMembers.find(m => m.id === memberId);
   await sbClient.from("members").delete().eq("id", memberId);
@@ -819,6 +857,13 @@ function statusClass(status){
   return "status-todo";
 }
 
+function canChangeTaskStatus(task){
+  if (!currentUser || !task) return false;
+  const myMember = myMemberProfile();
+  const isAssignee = !!myMember && task.assigned_to === myMember.id;
+  return isAssignee || isAdminEmail(currentUser.email);
+}
+
 function renderTasks(){
   const list = document.getElementById("task-list");
   list.innerHTML = "";
@@ -827,6 +872,8 @@ function renderTasks(){
   currentTasks.forEach(t => {
     const card = document.createElement("div");
     card.className = "task-card";
+    const canEditStatus = canChangeTaskStatus(t);
+    const canReassign = canManageLeadership();
     card.innerHTML = `
       <div class="task-main">
         <p class="task-title">${escapeHtml(t.title)}</p>
@@ -837,30 +884,78 @@ function renderTasks(){
         <div class="task-people">${personInlineHtml(t.assigned_to)} ← assigned by ${personInlineHtml(t.assigned_by)}</div>
       </div>
       <span class="task-due">${t.due_date ? "Due " + t.due_date : ""}</span>
-      <select class="task-status ${statusClass(t.status)}" data-task-id="${t.id}" data-prev-value="${t.status}">
-        <option${t.status === "To do" ? " selected" : ""}>To do</option>
-        <option${t.status === "In progress" ? " selected" : ""}>In progress</option>
-        <option${t.status === "Done" ? " selected" : ""}>Done</option>
-      </select>
+      <div class="task-actions">
+        <select class="task-status ${statusClass(t.status)}" data-task-id="${t.id}" data-prev-value="${t.status}" ${canEditStatus ? "" : "disabled"}>
+          <option${t.status === "To do" ? " selected" : ""}>To do</option>
+          <option${t.status === "In progress" ? " selected" : ""}>In progress</option>
+          <option${t.status === "Done" ? " selected" : ""}>Done</option>
+        </select>
+        ${canReassign ? `<button class="btn btn-ghost btn-small task-reassign" data-task-id="${t.id}">Edit assignment</button>` : ""}
+      </div>
     `;
     list.appendChild(card);
   });
 
   list.querySelectorAll(".task-status").forEach(sel => {
     sel.addEventListener("change", (e) => {
+      const task = currentTasks.find(t => String(t.id) === String(e.target.dataset.taskId));
+      if (!task) return;
+      if (!canChangeTaskStatus(task)) {
+        e.target.value = e.target.dataset.prevValue || e.target.value;
+        alert("Only the assigned member or the admin can change this task status.");
+        return;
+      }
       if (!requireAuth()) { e.target.value = e.target.dataset.prevValue || e.target.value; return; }
       e.target.className = "task-status " + statusClass(e.target.value);
-      updateTaskStatus(e.target.dataset.taskId, e.target.value);
+      updateTaskStatus(task.id, e.target.value);
+    });
+  });
+
+  list.querySelectorAll(".task-reassign").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const task = currentTasks.find(t => String(t.id) === String(btn.dataset.taskId));
+      if (!task) return;
+      if (!canManageLeadership()) {
+        alert("Only the admin can reassign tasks.");
+        return;
+      }
+
+      const currentAssignee = memberById(task.assigned_to);
+      const options = currentMembers.map(m => m.name).join(", ");
+      const response = prompt(`Current assignee: ${currentAssignee ? currentAssignee.name : "Unassigned"}\nChoose a team member to reassign this task:\n${options}`, currentAssignee ? currentAssignee.name : "");
+      if (response === null) return;
+      const selected = currentMembers.find(m => m.name.toLowerCase() === response.trim().toLowerCase());
+      if (!selected) {
+        alert("Please type an exact team member name from the list.");
+        return;
+      }
+
+      const previousAssigner = task.assigned_by;
+      const originalAssignee = currentAssignee ? currentAssignee.name : "Unassigned";
+      try {
+        await sbClient.from("tasks").update({ assigned_to: selected.id, assigned_by: previousAssigner }).eq("id", task.id);
+        task.assigned_to = selected.id;
+        if (previousAssigner) task.assigned_by = previousAssigner;
+        logActivity("reassigned a task", `"${task.title}" from ${originalAssignee} to ${selected.name}`);
+        await loadTasks();
+      } catch (err) {
+        console.error(err);
+        alert("Could not reassign task: " + (err.message || err));
+      }
     });
   });
 }
 
 async function updateTaskStatus(taskId, status){
   if (!sbClient) return;
+  const task = currentTasks.find(x => x.id === taskId);
+  if (!task || !canChangeTaskStatus(task)) {
+    alert("Only the assigned member or the admin can change this task status.");
+    return;
+  }
   await sbClient.from("tasks").update({ status }).eq("id", taskId);
-  const t = currentTasks.find(x => x.id === taskId);
-  if (t) t.status = status;
-  logActivity("changed task status", t ? `"${t.title}" → ${status}` : `→ ${status}`);
+  if (task) task.status = status;
+  logActivity("changed task status", task ? `"${task.title}" → ${status}` : `→ ${status}`);
 }
 
 function populateTaskPeopleDropdowns(){
@@ -988,15 +1083,45 @@ function renderActivity(){
   currentActivity.forEach(a => {
     const item = document.createElement("div");
     item.className = "activity-item";
+    const canManageActivities = !!currentUser && isAdminEmail(currentUser.email);
     item.innerHTML = `
       <span class="activity-dot"></span>
       <div class="activity-body">
         <div class="activity-line"><span class="activity-actor">${escapeHtml(a.actor_email || "Someone")}</span> ${escapeHtml(a.action)}${a.details ? ` — ${escapeHtml(a.details)}` : ""}</div>
         <div class="activity-time">${relativeTime(a.created_at)}</div>
       </div>
+      ${canManageActivities ? `<div class="activity-actions"><button class="btn btn-ghost btn-small" data-edit-activity-id="${a.id}">Edit</button><button class="btn btn-ghost btn-small" data-delete-activity-id="${a.id}">Delete</button></div>` : ""}
     `;
     list.appendChild(item);
   });
+
+  list.querySelectorAll("[data-edit-activity-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!canManageActivities()) return;
+      const activity = currentActivity.find(a => String(a.id) === btn.dataset.editActivityId);
+      if (!activity) return;
+      const original = `${activity.action}${activity.details ? ` — ${activity.details}` : ""}`;
+      const next = prompt("Edit this activity entry:", original);
+      if (next === null) return;
+      const [action, ...rest] = next.split(" — ");
+      const details = rest.join(" — ").trim() || null;
+      await sbClient.from("activity_log").update({ action: action.trim(), details }).eq("id", activity.id);
+      await loadActivity();
+    });
+  });
+
+  list.querySelectorAll("[data-delete-activity-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!canManageActivities()) return;
+      if (!confirm("Delete this activity entry?")) return;
+      await sbClient.from("activity_log").delete().eq("id", btn.dataset.deleteActivityId);
+      await loadActivity();
+    });
+  });
+}
+
+function canManageActivities(){
+  return !!currentUser && isAdminEmail(currentUser.email);
 }
 
 // ============================================================

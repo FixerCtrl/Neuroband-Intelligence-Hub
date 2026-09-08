@@ -75,13 +75,11 @@ create table if not exists activity_log (
 
 -- ------------------------------------------------------------
 -- ADMIN CHECK
--- Edit the email list below to match ADMIN_EMAILS in config.js.
--- Anyone signed in with one of these emails can delete things;
--- everyone else who's signed in can still add/edit, just not
--- delete.
+-- Edit the email list below to match the admin emails in
+-- config.js. Everyone else remains a standard user.
 -- ------------------------------------------------------------
 create or replace function is_admin() returns boolean as $$
-  select (auth.jwt() ->> 'email') in ('you@example.com');
+  select (auth.jwt() ->> 'email') in ('fixerctrl@gmail.com', 'mlungisimash27@gmail.com');
 $$ language sql stable;
 
 -- ------------------------------------------------------------
@@ -113,9 +111,13 @@ drop policy if exists "Allow all update on documents" on documents;
 drop policy if exists "Public read on documents" on documents;
 drop policy if exists "Authenticated insert on documents" on documents;
 drop policy if exists "Authenticated update on documents" on documents;
+drop policy if exists "Leader or admin update on documents" on documents;
+drop policy if exists "Everyone can edit documents" on documents;
 create policy "Public read on documents" on documents for select using (true);
 create policy "Authenticated insert on documents" on documents for insert with check (auth.role() = 'authenticated');
-create policy "Authenticated update on documents" on documents for update using (auth.role() = 'authenticated');
+create policy "Everyone can edit documents" on documents for update
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
 
 drop policy if exists "Allow all read on members" on members;
 drop policy if exists "Allow all insert on members" on members;
@@ -131,7 +133,7 @@ create policy "Public read on members" on members for select using (true);
 -- Each signed-in user may only create a member row for themselves.
 create policy "Users insert own member profile" on members for insert
   with check (auth.role() = 'authenticated' and user_id = auth.uid());
--- Users can edit their own profile; admins can edit anyone's.
+-- Members can edit their own profile, and admins can edit everyone.
 create policy "Users or admin update member profile" on members for update
   using (user_id = auth.uid() or is_admin());
 create policy "Admin delete on members" on members for delete using (is_admin());
@@ -144,9 +146,18 @@ drop policy if exists "Public read on tasks" on tasks;
 drop policy if exists "Authenticated insert on tasks" on tasks;
 drop policy if exists "Authenticated update on tasks" on tasks;
 drop policy if exists "Admin delete on tasks" on tasks;
+drop policy if exists "Task assignee or admin update on tasks" on tasks;
 create policy "Public read on tasks" on tasks for select using (true);
 create policy "Authenticated insert on tasks" on tasks for insert with check (auth.role() = 'authenticated');
-create policy "Authenticated update on tasks" on tasks for update using (auth.role() = 'authenticated');
+create policy "Task assignee or admin update on tasks" on tasks for update
+  using (
+    assigned_to in (select id from members where user_id = auth.uid())
+    or is_admin()
+  )
+  with check (
+    assigned_to in (select id from members where user_id = auth.uid())
+    or is_admin()
+  );
 create policy "Admin delete on tasks" on tasks for delete using (is_admin());
 
 -- ------------------------------------------------------------
@@ -194,8 +205,12 @@ create policy "Authenticated update on avatars bucket" on storage.objects
 alter table activity_log enable row level security;
 drop policy if exists "Public read on activity_log" on activity_log;
 drop policy if exists "Authenticated insert on activity_log" on activity_log;
+drop policy if exists "Admin update on activity_log" on activity_log;
+drop policy if exists "Admin delete on activity_log" on activity_log;
 create policy "Public read on activity_log" on activity_log for select using (true);
 create policy "Authenticated insert on activity_log" on activity_log for insert with check (auth.role() = 'authenticated');
+create policy "Admin update on activity_log" on activity_log for update using (is_admin()) with check (is_admin());
+create policy "Admin delete on activity_log" on activity_log for delete using (is_admin());
 
 -- ------------------------------------------------------------
 -- REAL-TIME SYNC

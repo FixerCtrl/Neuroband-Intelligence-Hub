@@ -1,36 +1,25 @@
 :root{
-  /* ---------- LIGHT THEME (default): true white / true black text ---------- */
-  --bg: #FFFFFF;
-  --surface: #F2F2F2;
-  --surface-raised: #FFFFFF;
-  --border: #CFCFCF;
-  --border-soft: #E4E4E4;
-  --text: #000000;
-  --text-muted: #4A4A4A;
-  --text-faint: #8A8A8A;
-  --accent: #00E0EC;
-  --accent-ink: #007680;
-  --accent-dim: #D6F7FA;
-  --success: #1C8A4B;
-  --success-dim: #DCF3E3;
-  --danger: #C1473C;
-  --avatar-bg: #E4E4E4;
-  --shadow-modal: rgba(0,0,0,0.35);
+  /* ---------- LIGHT THEME: warm office / collaborative workspace ---------- */
+  --bg: #f2f0eb;
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-raised: rgba(255, 255, 255, 0.96);
+  --border: #d9d6cf;
+  --border-soft: rgba(90, 88, 82, 0.14);
+  --text: #292a27;
+  --text-muted: #5d5e59;
+  --text-faint: #85857f;
+  --accent: #82aa9d;
+  --accent-ink: #315b50;
+  --accent-dim: #e7efeb;
+  --success: #4d9673;
+  --success-dim: #e4f0e9;
+  --danger: #b6786e;
+  --avatar-bg: #e8e5df;
+  --shadow-modal: rgba(47, 45, 40, 0.16);
 
-  /* ---------- BACKGROUND PHOTO (edit this to add your own image) ----------
-     Leave as `none` for a flat color background. To add a photo:
-     1. Put your image file in an `images/` folder in your repo
-        (e.g. images/hero-bg.jpg).
-     2. Replace the line below with something like:
-          --bg-photo: linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.88)), url("images/hero-bg.jpg");
-        The white gradient on top is a "wash" that dims the photo so
-        black text stays readable — raise 0.88 toward 1 for a fainter
-        photo, lower it toward 0.5 for a more visible one.
-     3. Do the same inside the html[data-theme="dark"] block below,
-        but use rgba(0,0,0, ...) instead of rgba(255,255,255, ...) so
-        the wash matches dark mode.
-  ------------------------------------------------------------------------ */
-  --bg-photo: none;
+  /* Office photo background with soft warm wash */
+  --bg-photo: linear-gradient(rgba(242, 240, 235, 0.9), rgba(242, 240, 235, 0.9)),
+    url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80");
 
   --radius-s: 4px;
   --radius-m: 8px;
@@ -39,24 +28,25 @@
 }
 
 html[data-theme="dark"]{
-  /* ---------- DARK THEME: true black / white-gray text ---------- */
-  --bg: #000000;
-  --surface: #141414;
-  --surface-raised: #1B1B1B;
-  --border: #333333;
-  --border-soft: #232323;
-  --text: #FFFFFF;
-  --text-muted: #B5B5B5;
-  --text-faint: #7A7A7A;
-  --accent: #00F6FF;
-  --accent-ink: #00F6FF;
-  --accent-dim: #003A3D;
-  --success: #33D17A;
-  --success-dim: #113322;
-  --danger: #E27C72;
-  --avatar-bg: #232323;
-  --shadow-modal: rgba(0,0,0,0.75);
-  --bg-photo: none; /* same idea as above, but for dark mode — use a black-tinted wash */
+  /* ---------- DARK THEME: cozy evening office ---------- */
+  --bg: #181b1a;
+  --surface: rgba(26, 31, 30, 0.9);
+  --surface-raised: rgba(36, 42, 41, 0.96);
+  --border: #3a4a45;
+  --border-soft: rgba(160, 187, 176, 0.16);
+  --text: #eef4f2;
+  --text-muted: #c6d0cd;
+  --text-faint: #9aa8a4;
+  --accent: #87c9b6;
+  --accent-ink: #dffaf1;
+  --accent-dim: #203f39;
+  --success: #7bdda6;
+  --success-dim: #1d3d30;
+  --danger: #d98a7d;
+  --avatar-bg: #2d3d39;
+  --shadow-modal: rgba(0,0,0,0.58);
+  --bg-photo: linear-gradient(rgba(20, 25, 24, 0.76), rgba(20, 25, 24, 0.76)),
+    url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80");
 }
 
 *{ box-sizing: border-box; }
@@ -79,6 +69,16 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 .shell{
   display:flex;
   min-height:100vh;
+  position: relative;
+}
+
+body::before{
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 38%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* ---------- SIDEBAR ---------- */
@@ -86,6 +86,8 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
   width: 232px;
   flex-shrink:0;
   background: var(--surface);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-right: 1px solid var(--border-soft);
   padding: 28px 20px;
   display:flex;
@@ -94,6 +96,7 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
   top:0;
   height:100vh;
   overflow:hidden;
+  box-shadow: 0 12px 24px rgba(62, 59, 53, 0.045);
 }
 
 .brand{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 40px; gap:10px; }
@@ -162,8 +165,8 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 .kit-statement{ font-size: 26px; line-height:1.35; font-weight:700; }
 
 .kin-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-top: 8px; }
-.kin-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding: 20px; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
-.kin-card:hover{ transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 6px 20px -12px var(--accent); }
+.kin-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding: 20px; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; box-shadow: 0 6px 16px rgba(53, 51, 47, 0.035); }
+.kin-card:hover{ transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 18px rgba(58, 84, 76, 0.07); }
 .kin-card h3{ font-family: var(--font-sans); font-weight:700; font-size:17px; margin: 0 0 4px; }
 .kin-card .kin-id{ font-family: var(--font-mono); font-size:11.5px; color: var(--accent-ink); font-weight:700; }
 .kin-card ul{ margin: 12px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 13.5px; }
@@ -174,14 +177,14 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 .hint code{ font-family: var(--font-mono); background: var(--surface); padding: 1px 5px; border-radius:3px; }
 
 /* ---------- DOC BLOCKS (plan / manual) ---------- */
-.doc-block{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding: 28px; }
+.doc-block{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding: 28px; box-shadow: 0 7px 18px rgba(56, 53, 48, 0.035); }
 .doc-view{ white-space: pre-wrap; font-size: 14.5px; color: var(--text); line-height:1.7; }
 .doc-edit{ width:100%; min-height: 360px; background: var(--bg); border:1px solid var(--border); border-radius: var(--radius-s); color: var(--text); padding:14px; resize: vertical; line-height:1.6; }
 .doc-actions{ margin-top:18px; display:flex; gap:10px; }
 
 /* ---------- BUTTONS ---------- */
 .btn{ border:none; cursor:pointer; padding: 9px 16px; border-radius: var(--radius-s); font-size: 13.5px; font-weight:700; font-family: var(--font-sans); }
-.btn-primary{ background: var(--accent); color:#00171A; }
+.btn-primary{ background: var(--accent); color:var(--accent-ink); }
 .btn-primary:hover{ opacity:0.85; }
 .btn-ghost{ background: transparent; border:1px solid var(--border); color: var(--text-muted); }
 .btn-ghost:hover{ color: var(--text); border-color: var(--text-muted); }
@@ -200,8 +203,8 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 
 .card-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
 
-.entry-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:18px; cursor:pointer; display:flex; flex-direction:column; gap:10px; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
-.entry-card:hover{ border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 6px 20px -12px var(--accent); }
+.entry-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:18px; cursor:pointer; display:flex; flex-direction:column; gap:10px; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; box-shadow: 0 8px 18px rgba(68, 56, 46, 0.04); }
+.entry-card:hover{ border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 12px 22px rgba(56, 84, 74, 0.12); }
 .entry-tags{ display:flex; gap:6px; flex-wrap:wrap; }
 .tag{ font-family: var(--font-mono); font-size: 10.5px; padding:2px 7px; border-radius: 3px; font-weight:700; }
 .tag-kin{ background: var(--accent-dim); color: var(--accent-ink); }
@@ -217,6 +220,7 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 .your-profile-card{
   display:flex; gap:18px; align-items:center; background: var(--surface); border:1px solid var(--border-soft);
   border-left:3px solid var(--accent); border-radius: var(--radius-m); padding:20px 24px; margin-bottom:32px;
+  box-shadow: 0 10px 18px rgba(60, 52, 46, 0.06);
 }
 .your-profile-avatar{
   width:56px; height:56px; border-radius:50%; background: var(--avatar-bg); color: var(--text-muted);
@@ -233,7 +237,7 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 
 /* ---------- TEAM TAB: members ---------- */
 .member-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap:14px; margin-bottom:44px; }
-.member-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:18px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; position:relative; transition: transform 0.15s ease, border-color 0.15s ease; }
+.member-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:18px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; position:relative; transition: transform 0.15s ease, border-color 0.15s ease; box-shadow: 0 8px 18px rgba(59, 53, 45, 0.04); }
 .member-card:hover{ transform: translateY(-2px); border-color: var(--accent); }
 .member-avatar{
   width:64px; height:64px; border-radius:50%; background: var(--avatar-bg); color: var(--text-muted);
@@ -252,7 +256,7 @@ button, input, select, textarea{ font-family: inherit; font-size: inherit; color
 
 /* ---------- TEAM TAB: tasks ---------- */
 .task-list{ display:flex; flex-direction:column; gap:10px; }
-.task-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:16px 18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; transition: border-color 0.15s ease; }
+.task-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:16px 18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; transition: border-color 0.15s ease; box-shadow: 0 8px 18px rgba(52, 47, 40, 0.04); }
 .task-card:hover{ border-color: var(--accent); }
 .task-main{ flex:1 1 240px; min-width:0; }
 .task-title{ font-weight:700; font-size:14.5px; margin:0 0 4px; }
