@@ -1,7 +1,7 @@
 :root{
   /* ---------- LIGHT THEME (default): true white / true black text ---------- */
   --bg: #FFFFFF;
-  --surface: #F2F2F2;
+  --surface: #03000039;
   --surface-raised: #FFFFFF;
   --border: #CFCFCF;
   --border-soft: #E4E4E4;
@@ -9,7 +9,7 @@
   --text-muted: #4A4A4A;
   --text-faint: #8A8A8A;
   --accent: #00E0EC;
-  --accent-ink: #007680;
+  --accent-ink: #026c76;
   --accent-dim: #D6F7FA;
   --danger: #C1473C;
   --avatar-bg: #E4E4E4;
