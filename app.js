@@ -104,6 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadTasks();
   loadActivity();
   initRealtime();
+  setInterval(updateMyPresence, 120000);
 });
 
 // ============================================================
@@ -126,10 +127,12 @@ async function initAuth(){
 
   const { data: { session } } = await sbClient.auth.getSession();
   currentUser = session ? session.user : null;
+  if (currentUser) await ensureMyProfile();
   renderAuthBox();
 
-  sbClient.auth.onAuthStateChange((_event, session) => {
+  sbClient.auth.onAuthStateChange(async (event, session) => {
     currentUser = session ? session.user : null;
+    if (currentUser) await ensureMyProfile(event === "SIGNED_IN");
     refreshIdentityUI();
     renderEntries();
   });
@@ -803,7 +806,8 @@ async function submitEntry(e){
 // ============================================================
 async function loadMembers(){
   if (!sbClient) { renderMembers(); return; }
-  const { data, error } = await sbClient.from("members").select("*").order("created_at", { ascending: true });
+  const memberFields = canManageLeadership() ? "*" : "id,name,avatar_path,bio,user_id,created_at";
+  const { data, error } = await sbClient.from("members").select(memberFields).order("created_at", { ascending: true });
   if (!error && data) currentMembers = data;
   renderMembers();
   renderAuthBox(); // members just loaded, so the sidebar can now show your claimed avatar/name
@@ -816,20 +820,31 @@ function initials(name){
 
 function renderMembers(){
   const grid = document.getElementById("member-grid");
+  const directoryNote = document.getElementById("team-directory-note");
+  const addMemberButton = document.getElementById("open-add-member");
   grid.innerHTML = "";
   const canModerate = canManageLeadership();
-  currentMembers.forEach(m => {
+  const visibleMembers = canModerate
+    ? currentMembers
+    : currentMembers.filter(member => member.user_id && member.user_id !== currentUser?.id);
+  if (directoryNote) {
+    directoryNote.textContent = canModerate ? "Admin view: presence and login history are visible only to admins." : "Your profile is shown above. Other team members are listed here.";
+    directoryNote.classList.toggle("is-hidden", visibleMembers.length === 0);
+  }
+  if (addMemberButton) addMemberButton.classList.toggle("is-hidden", !canModerate);
+  visibleMembers.forEach(m => {
     const card = document.createElement("div");
     card.className = "member-card";
     const avatarUrl = getPublicAvatarUrl(m.avatar_path);
     const canEditPhoto = currentUser && (m.user_id === currentUser.id || canModerate);
     card.innerHTML = `
-      ${canModerate ? `<button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>` : ""}
+      ${canModerate ? `<div class="member-card-actions"><button class="member-edit" title="Edit member" data-edit-member="${m.id}">Edit</button><button class="member-remove" title="Remove member profile" data-remove-member="${m.id}">&times;</button></div>` : ""}
       <div class="member-avatar" ${canEditPhoto ? `data-avatar-for="${m.id}" title="Click to change photo"` : ""} style="${canEditPhoto ? "" : "cursor:default;"}">
         ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
       </div>
       <div class="member-name">${escapeHtml(m.name)}${m.user_id ? "" : ` <span style="color:var(--text-faint); font-weight:400; font-size:11px;">(unclaimed)</span>`}</div>
       ${m.bio ? `<div class="member-bio">${escapeHtml(m.bio)}</div>` : ""}
+      ${m.user_id ? `<div class="member-presence ${isMemberOnline(m) ? "is-online" : ""}"><span class="presence-dot"></span>${isMemberOnline(m) ? "Online now" : `Last seen ${formatPresenceTime(m.last_seen_at)}`}${m.last_login_at ? ` · Login ${formatPresenceTime(m.last_login_at)}` : ""}</div>` : ""}
       ${canEditPhoto ? `<div class="member-avatar-hint">Click photo to update</div>` : ""}
     `;
     grid.appendChild(card);
@@ -840,6 +855,9 @@ function renderMembers(){
   });
   grid.querySelectorAll("[data-remove-member]").forEach(el => {
     el.addEventListener("click", () => removeMember(el.dataset.removeMember));
+  });
+  grid.querySelectorAll("[data-edit-member]").forEach(el => {
+    el.addEventListener("click", () => openMemberEditor(el.dataset.editMember));
   });
 
   updateAddMemberButtonLabel();
@@ -902,6 +920,51 @@ function renderYourProfile(){
   document.getElementById("your-profile-avatar-click").addEventListener("click", () => reuploadAvatar(mine.id));
 }
 
+function isMemberOnline(member){
+  const lastSeen = new Date(member.last_seen_at || 0).getTime();
+  return Number.isFinite(lastSeen) && Date.now() - lastSeen < 5 * 60 * 1000;
+}
+
+function formatPresenceTime(isoString){
+  if (!isoString) return "not yet";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(isoString));
+}
+
+async function ensureMyProfile(isNewLogin = false){
+  if (!sbClient || !currentUser) return;
+  const now = new Date().toISOString();
+  const existing = currentMembers.find(member => member.user_id === currentUser.id);
+  if (existing) {
+    const updates = { last_seen_at: now };
+    if (isNewLogin) updates.last_login_at = now;
+    await sbClient.from("members").update(updates).eq("id", existing.id);
+    existing.last_seen_at = now;
+    if (isNewLogin) existing.last_login_at = now;
+    return;
+  }
+  const displayName = currentUser.user_metadata?.full_name || currentUser.email?.split("@")[0] || "Team member";
+  const { data, error } = await sbClient.from("members").insert({
+    name: displayName,
+    user_id: currentUser.id,
+    last_seen_at: now,
+    last_login_at: isNewLogin ? now : null,
+    created_at: now
+  }).select().single();
+  if (!error && data) currentMembers.push(data);
+}
+
+async function updateMyPresence(){
+  if (!sbClient || !currentUser) return;
+  const mine = myMemberProfile();
+  if (!mine) return;
+  const now = new Date().toISOString();
+  const { error } = await sbClient.from("members").update({ last_seen_at: now }).eq("id", mine.id);
+  if (!error) {
+    mine.last_seen_at = now;
+    if (canManageLeadership()) renderMembers();
+  }
+}
+
 function getPublicAvatarUrl(path){
   if (!path || !sbClient) return null;
   const { data } = sbClient.storage.from("avatars").getPublicUrl(path);
@@ -944,6 +1007,21 @@ function closeAddMemberModal(){
   document.getElementById("member-modal-overlay").classList.add("is-hidden");
   document.getElementById("member-form").reset();
   document.getElementById("member-form-status").textContent = "";
+  memberEditorTargetId = null;
+}
+
+let memberEditorTargetId = null;
+
+function openMemberEditor(memberId){
+  if (!canManageLeadership()) return;
+  const member = currentMembers.find(item => item.id === memberId);
+  if (!member) return;
+  memberEditorTargetId = member.id;
+  document.getElementById("member-modal-title").textContent = `Edit ${member.name}`;
+  document.getElementById("m-name").value = member.name;
+  document.getElementById("m-bio").value = member.bio || "";
+  document.getElementById("submit-member").textContent = "Save changes";
+  document.getElementById("member-modal-overlay").classList.remove("is-hidden");
 }
 
 async function submitMember(e){
@@ -955,7 +1033,8 @@ async function submitMember(e){
   const name = document.getElementById("m-name").value;
   const bio = document.getElementById("m-bio").value;
   const file = document.getElementById("m-avatar").files[0];
-  const mine = myMemberProfile();
+  const mine = memberEditorTargetId ? currentMembers.find(member => member.id === memberEditorTargetId) : myMemberProfile();
+  if (memberEditorTargetId && !canManageLeadership()) return;
   status.textContent = "Saving…";
   status.className = "form-status";
 
@@ -970,7 +1049,7 @@ async function submitMember(e){
     if (mine) {
       const { error: updErr } = await sbClient.from("members").update({ name, bio, avatar_path: avatarPath }).eq("id", mine.id);
       if (updErr) throw updErr;
-      logActivity("updated their profile", name);
+      logActivity(memberEditorTargetId ? "updated a member profile" : "updated their profile", name);
     } else {
       const { error: insErr } = await sbClient.from("members").insert({
         name, bio, avatar_path: avatarPath, user_id: currentUser.id, created_at: new Date().toISOString()
@@ -1028,7 +1107,7 @@ async function removeMember(memberId){
     alert("Only the admin can remove members.");
     return;
   }
-  if (!confirm("Remove this member? Tasks assigned to them will remain but show as unassigned.")) return;
+  if (!confirm("Remove this member profile? Their login account is not deleted, but their profile and assignments will be unlinked.")) return;
   const member = currentMembers.find(m => m.id === memberId);
   await sbClient.from("members").delete().eq("id", memberId);
   logActivity("removed a team member", member ? member.name : undefined);

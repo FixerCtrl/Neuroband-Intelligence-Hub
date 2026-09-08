@@ -45,6 +45,8 @@ alter table members add column if not exists bio text;
 
 -- Add user_id to members created before this update (safe to re-run)
 alter table members add column if not exists user_id uuid references auth.users(id) on delete set null;
+alter table members add column if not exists last_seen_at timestamptz;
+alter table members add column if not exists last_login_at timestamptz;
 
 -- One profile per signed-in user — enforced at the database level
 -- so it can't be bypassed even outside the app's UI.
