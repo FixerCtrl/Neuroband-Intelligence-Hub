@@ -75,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSupabase();
   initAuth();
   renderOverview();
+  renderAnalysis();
   wireNav();
   wireMobileSidebar();
   wireDocBlocks();
@@ -345,6 +346,67 @@ function renderOverview(){
   });
 }
 
+function renderAnalysis(){
+  const summary = document.getElementById("analysis-summary");
+  if (!summary) return;
+
+  const totalEntries = currentEntries.length;
+  const totalQuestions = KINS.reduce((total, kin) => total + kin.kiqs.length, 0);
+  const coveredQuestions = new Set(currentEntries.map(entry => `${entry.kin}_${entry.kiq}`)).size;
+  const recentEntries = currentEntries.filter(entry => {
+    if (!entry.date_collected) return false;
+    const collected = new Date(`${entry.date_collected}T00:00:00`);
+    return (Date.now() - collected.getTime()) <= 1000 * 60 * 60 * 24 * 90;
+  }).length;
+  const completedTasks = currentTasks.filter(task => task.status === "Done").length;
+  const taskProgress = currentTasks.length ? Math.round((completedTasks / currentTasks.length) * 100) : 0;
+
+  summary.innerHTML = [
+    analysisMetric(totalEntries, "Sources collected", "Total evidence records"),
+    analysisMetric(`${coveredQuestions}/${totalQuestions}`, "Questions covered", "KIN/KIQ combinations with evidence"),
+    analysisMetric(`${recentEntries}`, "Recent sources", "Collected within 90 days"),
+    analysisMetric(`${taskProgress}%`, "Task progress", `${completedTasks} of ${currentTasks.length} tasks complete`),
+  ].join("");
+
+  renderAnalysisBars("analysis-kin-bars", KINS.map(kin => ({
+    label: kin.id,
+    value: currentEntries.filter(entry => entry.kin === kin.id).length,
+  })));
+
+  const sourceTypes = [...new Set(currentEntries.map(entry => entry.source_type).filter(Boolean))]
+    .map(type => ({ label: type, value: currentEntries.filter(entry => entry.source_type === type).length }))
+    .sort((a, b) => b.value - a.value);
+  renderAnalysisBars("analysis-type-bars", sourceTypes.length ? sourceTypes : [{ label: "No sources yet", value: 0 }]);
+
+  const questionList = document.getElementById("analysis-question-list");
+  questionList.innerHTML = KINS.flatMap(kin => kin.kiqs.map(question => {
+    const count = currentEntries.filter(entry => entry.kin === kin.id && entry.kiq === question.id).length;
+    const state = count === 0 ? "Needs evidence" : count === 1 ? "Early signal" : "Supported";
+    return `<div class="analysis-question"><div><strong>${kin.id}_${question.id}</strong><span>${escapeHtml(question.label)}</span></div><span class="analysis-state analysis-state-${state.toLowerCase().replace(" ", "-")}">${state} · ${count}</span></div>`;
+  })).join("");
+
+  const progressBar = document.getElementById("analysis-progress-bar");
+  const progressLabel = document.getElementById("analysis-progress-label");
+  progressBar.style.width = `${taskProgress}%`;
+  progressLabel.textContent = currentTasks.length ? `${completedTasks} of ${currentTasks.length} assigned tasks complete` : "No tasks assigned yet.";
+}
+
+function analysisMetric(value, label, note){
+  return `<div class="analysis-metric"><strong>${value}</strong><span>${label}</span><small>${note}</small></div>`;
+}
+
+function renderAnalysisBars(elementId, items){
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  const max = Math.max(...items.map(item => item.value), 1);
+  container.innerHTML = items.map(item => `
+    <div class="analysis-bar-row">
+      <div class="analysis-bar-label"><span>${escapeHtml(item.label)}</span><strong>${item.value}</strong></div>
+      <div class="analysis-bar-track"><span style="width:${Math.round((item.value / max) * 100)}%"></span></div>
+    </div>
+  `).join("");
+}
+
 // ---------- DOCUMENT BLOCKS (Collection Plan / Manual) ----------
 function wireDocBlocks(){
   document.querySelectorAll("[data-edit]").forEach(btn => {
@@ -472,6 +534,7 @@ async function loadEntries(){
   if (!error && data) currentEntries = data;
   document.getElementById("entry-count").textContent = `${currentEntries.length} ${currentEntries.length === 1 ? "entry" : "entries"} stored`;
   renderEntries();
+  renderAnalysis();
 }
 
 function renderEntries(){
@@ -873,6 +936,7 @@ async function loadTasks(){
   const { data, error } = await sbClient.from("tasks").select("*").order("created_at", { ascending: false });
   if (!error && data) currentTasks = data;
   renderTasks();
+  renderAnalysis();
 }
 
 function memberById(id){ return currentMembers.find(m => m.id === id); }
