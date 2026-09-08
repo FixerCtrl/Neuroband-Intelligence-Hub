@@ -181,9 +181,30 @@ function wireNotifications(){
     renderNotifications();
   });
   markRead.addEventListener("click", () => {
-    localStorage.setItem("nb-notifications-seen", new Date().toISOString());
+    const latestNotification = currentActivity.reduce((latest, item) => {
+      const createdAt = new Date(item.created_at).getTime();
+      return Number.isFinite(createdAt) && createdAt > latest ? createdAt : latest;
+    }, 0);
+    localStorage.setItem("nb-notifications-seen", new Date(latestNotification || Date.now()).toISOString());
     renderNotifications();
   });
+}
+
+function notificationDateKey(isoString){
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function notificationDateLabel(isoString){
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(date);
 }
 
 function renderNotifications(){
@@ -195,13 +216,33 @@ function renderNotifications(){
   const unread = currentActivity.filter(item => new Date(item.created_at).getTime() > seenAt).length;
   count.textContent = unread > 9 ? "9+" : String(unread);
   count.classList.toggle("is-hidden", unread === 0);
-  list.innerHTML = recent.length ? recent.map(item => `
-    <div class="notification-item${new Date(item.created_at).getTime() > seenAt ? " is-unread" : ""}">
-      <strong>${escapeHtml(item.action)}</strong>
-      ${item.details ? `<span>${escapeHtml(item.details)}</span>` : ""}
-      <small>${relativeTime(item.created_at)}</small>
-    </div>
-  `).join("") : `<p class="notification-empty">No activity yet.</p>`;
+  if (!recent.length) {
+    list.innerHTML = `<p class="notification-empty">No activity yet.</p>`;
+    return;
+  }
+
+  const groups = recent.reduce((grouped, item) => {
+    const key = notificationDateKey(item.created_at);
+    if (!grouped[key]) grouped[key] = { label: notificationDateLabel(item.created_at), items: [] };
+    grouped[key].items.push(item);
+    return grouped;
+  }, {});
+
+  list.innerHTML = Object.values(groups).map(group => `
+    <section class="notification-group">
+      <h3 class="notification-date">${escapeHtml(group.label)}</h3>
+      ${group.items.map(item => {
+        const isUnread = new Date(item.created_at).getTime() > seenAt;
+        return `
+          <div class="notification-item${isUnread ? " is-unread" : ""}">
+            <strong>${escapeHtml(item.action)}</strong>
+            ${item.details ? `<span>${escapeHtml(item.details)}</span>` : ""}
+            <small>${relativeTime(item.created_at)}</small>
+          </div>
+        `;
+      }).join("")}
+    </section>
+  `).join("");
 }
 
 // Call this at the top of anything that writes to the database.

@@ -119,6 +119,8 @@ body::before{
 .notification-panel{ position:absolute; top:76px; left:16px; right:16px; z-index:20; border:1px solid var(--border); border-radius:var(--radius-m); background:var(--surface-raised); box-shadow:0 10px 26px rgba(35, 34, 31, 0.14); overflow:hidden; }
 .notification-panel-head{ display:flex; justify-content:space-between; gap:8px; padding:11px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
 .notification-mark-read{ border:0; background:none; color:var(--accent-ink); cursor:pointer; font:700 11px var(--font-sans); }
+.notification-group + .notification-group{ border-top:1px solid var(--border); }
+.notification-date{ margin:0; padding:8px 12px 6px; background:var(--surface); color:var(--text-faint); font:700 10px var(--font-mono); letter-spacing:.04em; text-transform:uppercase; }
 .notification-item{ padding:10px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
 .notification-item.is-unread{ background:var(--accent-dim); border-left:3px solid var(--accent); padding-left:9px; }
 .notification-item:last-child{ border-bottom:0; }
