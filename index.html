@@ -10,16 +10,20 @@
 </head>
 <body>
 
+<button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Open navigation" aria-controls="site-sidebar" aria-expanded="false">☰ <span>Menu</span></button>
+<div class="sidebar-scrim" id="sidebar-scrim" aria-hidden="true"></div>
+
 <div class="shell">
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="site-sidebar">
     <div class="brand">
       <div class="brand-text">
         <span class="brand-name">Insight Consulting</span>
         <span class="brand-sub">Neuroband Intelligence Hub</span>
       </div>
       <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">☾</button>
+      <button class="mobile-sidebar-close" id="mobile-sidebar-close" aria-label="Close navigation">&times;</button>
     </div>
 
     <nav class="nav">
