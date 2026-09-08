@@ -1579,24 +1579,61 @@ function relativeTime(isoString){
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
+function activityDateKey(isoString){
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function activityDateLabel(isoString){
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
 function renderActivity(){
   const list = document.getElementById("activity-list");
   list.innerHTML = "";
   document.getElementById("activity-empty-state").classList.toggle("is-hidden", currentActivity.length !== 0);
+  const canManageActivities = !!currentUser && isAdminEmail(currentUser.email);
+  const dates = currentActivity.reduce((grouped, activity) => {
+    const dateKey = activityDateKey(activity.created_at);
+    if (!grouped[dateKey]) grouped[dateKey] = { label: activityDateLabel(activity.created_at), activities: [] };
+    grouped[dateKey].activities.push(activity);
+    return grouped;
+  }, {});
 
-  currentActivity.forEach(a => {
-    const item = document.createElement("div");
-    item.className = "activity-item";
-    const canManageActivities = !!currentUser && isAdminEmail(currentUser.email);
-    item.innerHTML = `
-      <span class="activity-dot"></span>
-      <div class="activity-body">
-        <div class="activity-line"><span class="activity-actor">${escapeHtml(a.actor_email || "Someone")}</span> ${escapeHtml(a.action)}${a.details ? ` — ${escapeHtml(a.details)}` : ""}</div>
-        <div class="activity-time">${relativeTime(a.created_at)}</div>
-      </div>
-      ${canManageActivities ? `<div class="activity-actions"><button class="btn btn-ghost btn-small" data-edit-activity-id="${a.id}">Edit</button><button class="btn btn-ghost btn-small" data-delete-activity-id="${a.id}">Delete</button></div>` : ""}
-    `;
-    list.appendChild(item);
+  Object.values(dates).forEach(dateGroup => {
+    const dateSection = document.createElement("section");
+    dateSection.className = "activity-date-group";
+    const authors = dateGroup.activities.reduce((grouped, activity) => {
+      const author = activity.actor_email || "Someone";
+      if (!grouped[author]) grouped[author] = [];
+      grouped[author].push(activity);
+      return grouped;
+    }, {});
+    dateSection.innerHTML = `<h2 class="activity-date-heading">${escapeHtml(dateGroup.label)}</h2>`;
+
+    Object.entries(authors).forEach(([author, activities]) => {
+      const authorGroup = document.createElement("div");
+      authorGroup.className = "activity-author-group";
+      authorGroup.innerHTML = `<h3 class="activity-author-heading"><span class="activity-author-avatar">${escapeHtml(initials(author))}</span>${escapeHtml(author)}<span class="activity-author-count">${activities.length}</span></h3>`;
+      activities.forEach(a => {
+        const item = document.createElement("div");
+        item.className = "activity-item";
+        item.innerHTML = `
+          <span class="activity-dot"></span>
+          <div class="activity-body">
+            <div class="activity-line">${escapeHtml(a.action)}${a.details ? ` — ${escapeHtml(a.details)}` : ""}</div>
+            <div class="activity-time">${relativeTime(a.created_at)}</div>
+          </div>
+          ${canManageActivities ? `<div class="activity-actions"><button class="btn btn-ghost btn-small" data-edit-activity-id="${a.id}">Edit</button><button class="btn btn-ghost btn-small" data-delete-activity-id="${a.id}">Delete</button></div>` : ""}
+        `;
+        authorGroup.appendChild(item);
+      });
+      dateSection.appendChild(authorGroup);
+    });
+    list.appendChild(dateSection);
   });
 
   renderNotifications();
