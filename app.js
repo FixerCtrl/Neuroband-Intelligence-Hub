@@ -33,27 +33,35 @@ RESPONSIBILITIES
 
 Edit this block directly — it's saved to your Supabase project as soon as you hit Save.`,
 
-  manual: `HOW DATA IS STORED
-Every source lives as one entry in the Repository tab. Each entry stores five required metadata fields — Source, Author, Date, Type of source, Relevance to KIQ — plus the KIN/KIQ it answers and the actual extract file (PDF or image), uploaded directly rather than linked.
+  manual: `DATA STORAGE
+- Store each source as a separate entry in the Repository tab.
+- Complete all required fields: Source, Author, Date, Type of Source, and Relevance to KIQ.
+- Select the related KIN and KIQ.
+- Upload the original extract file directly as a PDF or image. Do not add a link instead.
 
-HOW TO RETRIEVE DATA
-Use the search bar and the KIN / KIQ / source-type filters at the top of the Repository tab. They combine, so you can e.g. filter to KIN2 + "News article" and then search within that. Click any card to open the full entry and download the original file.
+DATA RETRIEVAL
+- Search by source, author, or notes using the Repository search bar.
+- Combine filters for KIN, KIQ, and Source Type.
+- Example: select KIN2 and News article to narrow the results.
+- Select an entry card to view the full record and download the original file.
 
-HOW CONSISTENCY IS MAINTAINED
-The KIN and KIQ dropdowns are generated from config.js, so every entry is tagged against the same fixed list your group defined in Practical 1 — no free-typed variants. File names are generated automatically on upload using the convention below, so naming never depends on who's adding the entry.
+CONSISTENCY
+- Use the KIN and KIQ dropdowns generated from config.js.
+- Use the predefined Source Type options for consistent tagging.
+- The system generates the file name automatically during upload.
+- Review the generated file name before saving.
 
 FILE NAMING CONVENTION
-NEUROBAND_[KIN]_[KIQ]_[SourceType]_[YYYYMMDD]_[shortsourcename].[ext]
+NEUROBAND_[KIN]_[KIQ]_[SourceType]_[YYYYMMDD]_[ShortSourceName].[ext]
 Example: NEUROBAND_KIN2_KIQ1_NewsArticle_20240312_BusinessInsiderAfrica.pdf
-This is generated for you automatically when you upload a file — you'll see the exact name before you save.
 
-RULES FOR UPDATING THE SYSTEM
-- Never delete an entry once the group has discussed it in a meeting — if it turns out to be irrelevant, note that in the relevance field instead, so the group's reasoning stays visible.
-- Only add sources that meet the inclusion criteria in the Collection Plan tab.
-- If you update config.js (e.g. to add a KIQ), do it once as a group so tags stay consistent across everyone's entries.
-- Keep this manual current — if the process changes, edit this page rather than explaining it verbally.
+SYSTEM UPDATE RULES
+- Do not delete sources that have been discussed in meetings.
+- If a source becomes irrelevant, update Relevance to explain why.
+- Add only sources that meet the inclusion criteria in the Collection Plan tab.
+- Update config.js as a group so KIN and KIQ tags remain consistent.
 
-Edit this block directly — it's saved to your Supabase project as soon as you hit Save.`
+Edit this page when the process changes. Changes are saved after selecting Save changes.`
 };
 
 let sbClient = null;
@@ -188,7 +196,7 @@ function renderNotifications(){
   count.textContent = unread > 9 ? "9+" : String(unread);
   count.classList.toggle("is-hidden", unread === 0);
   list.innerHTML = recent.length ? recent.map(item => `
-    <div class="notification-item">
+    <div class="notification-item${new Date(item.created_at).getTime() > seenAt ? " is-unread" : ""}">
       <strong>${escapeHtml(item.action)}</strong>
       ${item.details ? `<span>${escapeHtml(item.details)}</span>` : ""}
       <small>${relativeTime(item.created_at)}</small>

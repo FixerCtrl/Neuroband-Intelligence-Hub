@@ -106,22 +106,21 @@ body::before{
 .brand-name{ font-family: var(--font-sans); font-weight:700; font-size: 17px; }
 .brand-sub{ font-size: 11.5px; color: var(--text-muted); }
 
-.theme-toggle{
+.theme-toggle, .notification-toggle{
   width:34px; height:34px; flex-shrink:0;
   border:1px solid var(--border); background: var(--surface-raised);
   border-radius: 50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
   font-size:14px; font-weight:700; font-family: var(--font-sans); color: var(--text);
 }
-.theme-toggle:hover{ border-color: var(--accent); }
-.notification-toggle{ position:relative; border:1px solid var(--border); background:var(--surface-raised); color:var(--text); border-radius:50%; width:34px; height:34px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; font-family:"Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif; }
-.notification-toggle:hover{ border-color:var(--accent); }
-.notification-icon{ display:block; line-height:1; color:#000; font-variant-emoji:text; text-shadow:0 0 0.01px currentColor; }
-html[data-theme="dark"] .notification-icon{ color:#fff; }
+.theme-toggle:hover, .notification-toggle:hover{ border-color:var(--accent); }
+.notification-toggle{ position:relative; flex:0 0 34px; aspect-ratio:1; font-family:"Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif; }
+.notification-icon{ display:block; line-height:1; color:var(--text); font-variant-emoji:text; text-shadow:0 0 0.01px currentColor; }
 .notification-count{ position:absolute; top:-5px; right:-5px; min-width:16px; height:16px; padding:0 3px; border-radius:99px; background:var(--danger); color:#fff; font:700 10px/16px var(--font-sans); }
 .notification-panel{ position:absolute; top:76px; left:16px; right:16px; z-index:20; border:1px solid var(--border); border-radius:var(--radius-m); background:var(--surface-raised); box-shadow:0 10px 26px rgba(35, 34, 31, 0.14); overflow:hidden; }
 .notification-panel-head{ display:flex; justify-content:space-between; gap:8px; padding:11px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
 .notification-mark-read{ border:0; background:none; color:var(--accent-ink); cursor:pointer; font:700 11px var(--font-sans); }
 .notification-item{ padding:10px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; }
+.notification-item.is-unread{ background:var(--accent-dim); border-left:3px solid var(--accent); padding-left:9px; }
 .notification-item:last-child{ border-bottom:0; }
 .notification-item strong, .notification-item span, .notification-item small{ display:block; }
 .notification-item span{ color:var(--text-muted); margin-top:2px; }
@@ -179,6 +178,7 @@ html[data-theme="dark"] .notification-icon{ color:#fff; }
 .panel-head-row{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
 .eyebrow{ color: var(--accent-ink); font-size: 12.5px; font-weight:700; margin: 0 0 6px; letter-spacing:0.02em; }
 .panel-head h1{ font-family: var(--font-sans); font-weight:700; font-size: 30px; margin:0; max-width: 720px; }
+.manual-title{ font-weight:700; }
 
 .kit-statement{ font-size: 26px; line-height:1.35; font-weight:700; }
 .panel-intro{ color:var(--text-muted); margin:8px 0 0; max-width:620px; }
@@ -391,9 +391,7 @@ html[data-theme="dark"] .notification-icon{ color:#fff; }
   .mobile-sidebar-close{ display:block; border:0; background:none; color:var(--text-muted); font-size:26px; line-height:1; cursor:pointer; padding:2px 4px; }
   .brand{ margin-bottom:8px; width:100%; }
   .brand .theme-toggle{ margin-left:auto; }
-  .brand .notification-toggle{ width:34px; height:34px; flex:0 0 34px; margin-left:auto; padding:0; color:var(--text); }
-  .brand .notification-icon{ color:#000; font-size:14px; }
-  html[data-theme="dark"] .brand .notification-icon{ color:#fff; }
+  .brand .notification-toggle{ width:34px; height:34px; flex:0 0 34px; margin-left:auto; padding:0; }
   .nav{ display:flex; flex-direction:column; gap:4px; width:100%; }
   .nav-item{ min-height:42px; padding:9px 10px; font-size:13px; }
   .auth-box{ margin-top:0; }
