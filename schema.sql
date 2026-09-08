@@ -52,6 +52,11 @@ alter table members add column if not exists last_login_at timestamptz;
 -- so it can't be bypassed even outside the app's UI.
 create unique index if not exists members_user_id_unique on members(user_id) where user_id is not null;
 
+-- Remove legacy unclaimed placeholder profiles; claimed profiles are untouched.
+delete from members
+where user_id is null
+  and name in ('FixerCtrl', 'Team 01');
+
 -- Table: tasks (Team tab — work assignment)
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),

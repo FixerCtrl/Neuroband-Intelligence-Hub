@@ -127,12 +127,18 @@ async function initAuth(){
 
   const { data: { session } } = await sbClient.auth.getSession();
   currentUser = session ? session.user : null;
-  if (currentUser) await ensureMyProfile();
+  if (currentUser) {
+    await ensureMyProfile();
+    await loadMembers();
+  }
   renderAuthBox();
 
   sbClient.auth.onAuthStateChange(async (event, session) => {
     currentUser = session ? session.user : null;
-    if (currentUser) await ensureMyProfile(event === "SIGNED_IN");
+    if (currentUser) {
+      await ensureMyProfile(event === "SIGNED_IN");
+      await loadMembers();
+    }
     refreshIdentityUI();
     renderEntries();
   });
@@ -824,6 +830,9 @@ async function submitEntry(e){
 // ============================================================
 async function loadMembers(){
   if (!sbClient) { renderMembers(); return; }
+  if (canManageLeadership()) {
+    await sbClient.from("members").delete().is("user_id", null).in("name", ["FixerCtrl", "Team 01"]);
+  }
   const memberFields = canManageLeadership() ? "*" : "id,name,avatar_path,bio,user_id,created_at";
   const { data, error } = await sbClient.from("members").select(memberFields).order("created_at", { ascending: true });
   if (!error && data) currentMembers = data;
