@@ -68,6 +68,7 @@ let sbClient = null;
 let currentEntries = [];
 let currentMembers = [];
 let currentTasks = [];
+let currentTaskComments = [];
 let currentUser = null;
 let currentActivity = [];
 
@@ -138,6 +139,8 @@ async function initAuth(){
 function refreshIdentityUI(){
   renderAuthBox();
   renderMembers();   // re-show/hide admin-only controls and refresh the profile card
+  renderTasks();
+  renderNotifications();
 }
 
 function renderAuthBox(){
@@ -181,7 +184,7 @@ function wireNotifications(){
     renderNotifications();
   });
   markRead.addEventListener("click", () => {
-    const latestNotification = currentActivity.reduce((latest, item) => {
+    const latestNotification = [...currentActivity, ...currentTaskComments].reduce((latest, item) => {
       const createdAt = new Date(item.created_at).getTime();
       return Number.isFinite(createdAt) && createdAt > latest ? createdAt : latest;
     }, 0);
@@ -212,8 +215,19 @@ function renderNotifications(){
   const count = safeId("notification-count");
   if (!list || !count) return;
   const seenAt = new Date(localStorage.getItem("nb-notifications-seen") || 0).getTime();
-  const recent = currentActivity.slice(0, 8);
-  const unread = currentActivity.filter(item => new Date(item.created_at).getTime() > seenAt).length;
+  const taskNotifications = currentTaskComments
+    .filter(comment => {
+      const task = currentTasks.find(item => String(item.id) === String(comment.task_id));
+      const mine = myMemberProfile();
+      return currentUser && mine && comment.author_id !== mine.id && task && (task.assigned_to === mine.id || task.assigned_by === mine.id || isAdminEmail(currentUser.email));
+    })
+    .map(comment => {
+      const task = currentTasks.find(item => String(item.id) === String(comment.task_id));
+      return { ...comment, action: `Comment on ${task ? task.title : "assigned task"}`, details: comment.body };
+    });
+  const notifications = [...currentActivity, ...taskNotifications].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const recent = notifications.slice(0, 8);
+  const unread = notifications.filter(item => new Date(item.created_at).getTime() > seenAt).length;
   count.textContent = unread > 9 ? "9+" : String(unread);
   count.classList.toggle("is-hidden", unread === 0);
   if (!recent.length) {
@@ -1020,8 +1034,15 @@ async function loadTasks(){
   if (!sbClient) { renderTasks(); return; }
   const { data, error } = await sbClient.from("tasks").select("*").order("created_at", { ascending: false });
   if (!error && data) currentTasks = data;
+  await loadTaskComments();
   renderTasks();
   renderAnalysis();
+}
+
+async function loadTaskComments(){
+  if (!sbClient) return;
+  const { data, error } = await sbClient.from("task_comments").select("*").order("created_at", { ascending: true });
+  if (!error && data) currentTaskComments = data;
 }
 
 function memberById(id){ return currentMembers.find(m => m.id === id); }
@@ -1046,6 +1067,16 @@ function canChangeTaskStatus(task){
   return isAssignee || isAdminEmail(currentUser.email);
 }
 
+function canCommentOnTask(task){
+  if (!currentUser || !task) return false;
+  const mine = myMemberProfile();
+  return isAdminEmail(currentUser.email) || (!!mine && (task.assigned_to === mine.id || task.assigned_by === mine.id));
+}
+
+function taskComments(taskId){
+  return currentTaskComments.filter(comment => String(comment.task_id) === String(taskId));
+}
+
 function renderTasks(){
   const list = document.getElementById("task-list");
   list.innerHTML = "";
@@ -1056,6 +1087,7 @@ function renderTasks(){
     card.className = "task-card";
     const canEditStatus = canChangeTaskStatus(t);
     const canReassign = canManageLeadership();
+    const comments = taskComments(t.id);
     card.innerHTML = `
       <div class="task-main">
         <p class="task-title">${escapeHtml(t.title)}</p>
@@ -1073,6 +1105,16 @@ function renderTasks(){
           <option${t.status === "Done" ? " selected" : ""}>Done</option>
         </select>
         ${canReassign ? `<button class="btn btn-ghost btn-small task-reassign" data-task-id="${t.id}">Edit assignment</button>` : ""}
+      </div>
+      <div class="task-channel">
+        <div class="task-channel-head"><strong>Team channel</strong><span>${comments.length} comment${comments.length === 1 ? "" : "s"}</span></div>
+        <div class="task-comments">${comments.length ? comments.map(comment => `
+          <div class="task-comment">
+            <div class="task-comment-meta"><strong>${escapeHtml(memberById(comment.author_id)?.name || comment.author_email || "Team member")}</strong><small>${relativeTime(comment.created_at)}</small></div>
+            <p>${escapeHtml(comment.body)}</p>
+          </div>
+        `).join("") : `<p class="task-comments-empty">Ask a question or leave a note about this task.</p>`}</div>
+        ${canCommentOnTask(t) ? `<form class="task-comment-form" data-task-id="${t.id}"><input name="body" maxlength="500" placeholder="Ask a question or add a comment" required /><button class="btn btn-ghost btn-small" type="submit">Send</button></form>` : ""}
       </div>
     `;
     list.appendChild(card);
@@ -1126,6 +1168,33 @@ function renderTasks(){
       }
     });
   });
+
+  list.querySelectorAll(".task-comment-form").forEach(form => {
+    form.addEventListener("submit", (event) => submitTaskComment(event, form.dataset.taskId));
+  });
+}
+
+async function submitTaskComment(event, taskId){
+  event.preventDefault();
+  if (!requireAuth() || !sbClient) return;
+  const task = currentTasks.find(item => String(item.id) === String(taskId));
+  const mine = myMemberProfile();
+  const body = event.currentTarget.elements.body.value.trim();
+  if (!task || !mine || !body || !canCommentOnTask(task)) return;
+  const { error } = await sbClient.from("task_comments").insert({
+    task_id: task.id,
+    author_id: mine.id,
+    author_email: currentUser.email,
+    body,
+    created_at: new Date().toISOString()
+  });
+  if (error) {
+    alert("Could not send the comment: " + error.message);
+    return;
+  }
+  event.currentTarget.reset();
+  await loadTaskComments();
+  renderTasks();
 }
 
 async function updateTaskStatus(taskId, status){
@@ -1326,6 +1395,14 @@ function initRealtime(){
 
   sbClient.channel("public:tasks")
     .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => loadTasks())
+    .subscribe();
+
+  sbClient.channel("public:task_comments")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "task_comments" }, async () => {
+      await loadTaskComments();
+      renderTasks();
+      renderNotifications();
+    })
     .subscribe();
 
   sbClient.channel("public:documents")

@@ -63,6 +63,16 @@ create table if not exists tasks (
   created_at timestamptz default now()
 );
 
+-- Table: task_comments (questions and discussion on assigned work)
+create table if not exists task_comments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references tasks(id) on delete cascade,
+  author_id uuid references members(id) on delete set null,
+  author_email text,
+  body text not null,
+  created_at timestamptz default now()
+);
+
 -- Table: activity_log (append-only audit trail — nothing can
 -- update or delete rows here, not even admins, by design)
 create table if not exists activity_log (
@@ -92,6 +102,7 @@ alter table entries enable row level security;
 alter table documents enable row level security;
 alter table members enable row level security;
 alter table tasks enable row level security;
+alter table task_comments enable row level security;
 
 drop policy if exists "Allow all read on entries" on entries;
 drop policy if exists "Allow all insert on entries" on entries;
@@ -159,6 +170,11 @@ create policy "Task assignee or admin update on tasks" on tasks for update
     or is_admin()
   );
 create policy "Admin delete on tasks" on tasks for delete using (is_admin());
+
+drop policy if exists "Public read on task_comments" on task_comments;
+drop policy if exists "Authenticated insert on task_comments" on task_comments;
+create policy "Public read on task_comments" on task_comments for select using (true);
+create policy "Authenticated insert on task_comments" on task_comments for insert with check (auth.role() = 'authenticated');
 
 -- ------------------------------------------------------------
 -- STORAGE BUCKETS
@@ -228,6 +244,9 @@ begin
   end if;
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'tasks') then
     alter publication supabase_realtime add table tasks;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'task_comments') then
+    alter publication supabase_realtime add table task_comments;
   end if;
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'documents') then
     alter publication supabase_realtime add table documents;
