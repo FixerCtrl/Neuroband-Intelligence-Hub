@@ -262,3 +262,6 @@ begin
     alter publication supabase_realtime add table activity_log;
   end if;
 end $$;
+
+-- Refresh PostgREST so newly-created task_comments is immediately available.
+notify pgrst, 'reload schema';

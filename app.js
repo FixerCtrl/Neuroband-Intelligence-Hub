@@ -69,6 +69,7 @@ let currentEntries = [];
 let currentMembers = [];
 let currentTasks = [];
 let currentTaskComments = [];
+let taskCommentsUnavailable = false;
 let currentTaskView = "mine";
 let currentUser = null;
 let currentActivity = [];
@@ -1164,9 +1165,12 @@ async function loadTaskComments(){
   if (!sbClient) return;
   const { data, error } = await sbClient.from("task_comments").select("*").order("created_at", { ascending: true });
   if (error) {
+    taskCommentsUnavailable = error.code === "PGRST205" || error.message?.includes("task_comments");
     console.error("Could not load task comments:", error.message);
+    renderTasks();
     return;
   }
+  taskCommentsUnavailable = false;
   if (data) currentTaskComments = data;
   renderNotifications();
 }
@@ -1342,13 +1346,13 @@ function renderTasks(){
       </div>
       <div class="task-channel">
         <div class="task-channel-head"><strong>Team channel</strong><span>${comments.length} comment${comments.length === 1 ? "" : "s"}</span></div>
-        <div class="task-comments">${comments.length ? comments.map(comment => `
+        <div class="task-comments">${taskCommentsUnavailable ? `<p class="task-comments-setup">Comments are temporarily unavailable. An admin needs to run the latest <strong>schema.sql</strong> in Supabase.</p>` : comments.length ? comments.map(comment => `
           <div class="task-comment">
             <div class="task-comment-meta"><strong>${escapeHtml(memberById(comment.author_id)?.name || comment.author_email || "Team member")}</strong><small>${relativeTime(comment.created_at)}</small></div>
             <p>${escapeHtml(comment.body)}</p>
           </div>
         `).join("") : `<p class="task-comments-empty">Ask a question or leave a note about this task.</p>`}</div>
-        ${canCommentOnTask(t) ? `<form class="task-comment-form" data-task-id="${t.id}"><input name="body" maxlength="500" placeholder="Ask a question or add a comment" required /><button class="btn btn-ghost btn-small" type="submit">Send</button></form>` : ""}
+        ${canCommentOnTask(t) && !taskCommentsUnavailable ? `<form class="task-comment-form" data-task-id="${t.id}"><input name="body" maxlength="500" placeholder="Ask a question or add a comment" required /><button class="btn btn-ghost btn-small" type="submit">Send</button></form>` : ""}
       </div>
     `;
     list.appendChild(card);
