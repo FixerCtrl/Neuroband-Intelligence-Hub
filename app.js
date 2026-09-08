@@ -190,8 +190,10 @@ async function submitAuth(e){
 
   try {
     if (authMode === "signin") {
-      const { error } = await sbClient.auth.signInWithPassword({ email, password });
+      const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      currentUser = data.user;
+      refreshIdentityUI();
       status.textContent = "Signed in.";
       status.className = "form-status is-success";
       setTimeout(closeAuthModal, 400);
@@ -199,6 +201,8 @@ async function submitAuth(e){
       const { data, error } = await sbClient.auth.signUp({ email, password });
       if (error) throw error;
       if (data.session) {
+        currentUser = data.user;
+        refreshIdentityUI();
         status.textContent = "Account created and signed in.";
         status.className = "form-status is-success";
         setTimeout(closeAuthModal, 400);
