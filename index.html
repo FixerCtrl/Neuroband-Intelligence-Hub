@@ -30,13 +30,18 @@
     </div>
 
     <nav class="nav">
-      <button class="nav-item is-active" data-tab="overview">Overview</button>
-      <button class="nav-item" data-tab="analysis">Analysis</button>
-      <button class="nav-item" data-tab="plan">Collection Plan</button>
-      <button class="nav-item" data-tab="repository">Repository</button>
-      <button class="nav-item" data-tab="team">Team</button>
-      <button class="nav-item" data-tab="activity">Activity</button>
-      <button class="nav-item" data-tab="manual">Manual</button>
+      <div class="nav-group nav-primary" aria-label="Workspace">
+        <button class="nav-item is-active" data-tab="overview">Overview</button>
+        <button class="nav-item" data-tab="analysis">Analysis</button>
+        <button class="nav-item" data-tab="plan">Collection Plan</button>
+        <button class="nav-item" data-tab="repository">Repository</button>
+        <button class="nav-item" data-tab="team">Team</button>
+        <button class="nav-item" data-tab="activity">Activity</button>
+      </div>
+      <div class="nav-group nav-admin" aria-label="System">
+        <p class="nav-group-label">System</p>
+        <button class="nav-item" data-tab="manual">Manual</button>
+      </div>
     </nav>
 
     <div class="auth-box" id="auth-box">
