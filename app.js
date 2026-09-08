@@ -116,10 +116,18 @@ function renderAuthBox(){
     return;
   }
   const admin = isAdminEmail(currentUser.email);
+  const mine = myMemberProfile();
+  const avatarUrl = mine ? getPublicAvatarUrl(mine.avatar_path) : null;
+  const displayName = mine ? mine.name : currentUser.email;
   box.innerHTML = `
     <div class="auth-signed-in">
-      ${admin ? `<span class="auth-admin-badge">ADMIN</span>` : ""}
-      <span class="auth-email">${escapeHtml(currentUser.email)}</span>
+      <div class="auth-identity-row">
+        <div class="auth-mini-avatar">${avatarUrl ? `<img src="${avatarUrl}" alt="" />` : initials(mine ? mine.name : currentUser.email.split("@")[0])}</div>
+        <div class="auth-identity-text">
+          ${admin ? `<span class="auth-admin-badge">ADMIN</span>` : ""}
+          <span class="auth-email">${escapeHtml(displayName)}</span>
+        </div>
+      </div>
       <button class="btn btn-ghost btn-small" id="sign-out-btn">Sign out</button>
     </div>
   `;
@@ -556,6 +564,7 @@ async function loadMembers(){
   const { data, error } = await sbClient.from("members").select("*").order("created_at", { ascending: true });
   if (!error && data) currentMembers = data;
   renderMembers();
+  renderAuthBox(); // members just loaded, so the sidebar can now show your claimed avatar/name
   populateTaskPeopleDropdowns();
 }
 
@@ -578,6 +587,7 @@ function renderMembers(){
         ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
       </div>
       <div class="member-name">${escapeHtml(m.name)}${m.user_id ? "" : ` <span style="color:var(--text-faint); font-weight:400; font-size:11px;">(unclaimed)</span>`}</div>
+      ${m.bio ? `<div class="member-bio">${escapeHtml(m.bio)}</div>` : ""}
       ${canEditPhoto ? `<div class="member-avatar-hint">Click photo to update</div>` : ""}
     `;
     grid.appendChild(card);
@@ -591,6 +601,63 @@ function renderMembers(){
   });
 
   updateAddMemberButtonLabel();
+  renderYourProfile();
+}
+
+function renderYourProfile(){
+  const slot = document.getElementById("your-profile-slot");
+  if (!slot) return;
+
+  if (!currentUser) {
+    slot.innerHTML = `
+      <div class="your-profile-card">
+        <div class="your-profile-avatar">?</div>
+        <div class="your-profile-text">
+          <div class="your-profile-kicker">Not signed in</div>
+          <div class="your-profile-empty-note">Sign in to claim your profile and see your identity here.</div>
+        </div>
+        <button class="btn btn-primary" id="your-profile-signin-btn">Sign in</button>
+      </div>
+    `;
+    document.getElementById("your-profile-signin-btn").addEventListener("click", openAuthModal);
+    return;
+  }
+
+  const mine = myMemberProfile();
+  const admin = isAdminEmail(currentUser.email);
+
+  if (!mine) {
+    slot.innerHTML = `
+      <div class="your-profile-card">
+        <div class="your-profile-avatar">${initials(currentUser.email.split("@")[0])}</div>
+        <div class="your-profile-text">
+          <div class="your-profile-kicker">Signed in${admin ? " · ADMIN" : ""}</div>
+          <div class="your-profile-name">${escapeHtml(currentUser.email)}</div>
+          <div class="your-profile-empty-note">You haven't added yourself to the team roster yet.</div>
+        </div>
+        <button class="btn btn-primary" id="your-profile-add-btn">+ Add myself</button>
+      </div>
+    `;
+    document.getElementById("your-profile-add-btn").addEventListener("click", () => document.getElementById("open-add-member").click());
+    return;
+  }
+
+  const avatarUrl = getPublicAvatarUrl(mine.avatar_path);
+  slot.innerHTML = `
+    <div class="your-profile-card">
+      <div class="your-profile-avatar" id="your-profile-avatar-click" title="Click to change photo">
+        ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(mine.name)}" />` : initials(mine.name)}
+      </div>
+      <div class="your-profile-text">
+        <div class="your-profile-kicker">Signed in as${admin ? " · ADMIN" : ""}</div>
+        <div class="your-profile-name">${escapeHtml(mine.name)}</div>
+        ${mine.bio ? `<div class="your-profile-bio">${escapeHtml(mine.bio)}</div>` : `<div class="your-profile-bio">${escapeHtml(currentUser.email)}</div>`}
+      </div>
+      <button class="btn btn-ghost" id="your-profile-edit-btn">Edit profile</button>
+    </div>
+  `;
+  document.getElementById("your-profile-edit-btn").addEventListener("click", () => document.getElementById("open-add-member").click());
+  document.getElementById("your-profile-avatar-click").addEventListener("click", () => reuploadAvatar(mine.id));
 }
 
 function getPublicAvatarUrl(path){
@@ -617,6 +684,7 @@ function wireMemberModal(){
     const mine = myMemberProfile();
     document.getElementById("member-modal-title").textContent = mine ? "Edit my profile" : "Add yourself to the team";
     document.getElementById("m-name").value = mine ? mine.name : "";
+    document.getElementById("m-bio").value = mine ? (mine.bio || "") : "";
     document.getElementById("submit-member").textContent = mine ? "Save changes" : "Add me";
     document.getElementById("member-modal-overlay").classList.remove("is-hidden");
   });
@@ -643,6 +711,7 @@ async function submitMember(e){
   if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
 
   const name = document.getElementById("m-name").value;
+  const bio = document.getElementById("m-bio").value;
   const file = document.getElementById("m-avatar").files[0];
   const mine = myMemberProfile();
   status.textContent = "Saving…";
@@ -657,12 +726,12 @@ async function submitMember(e){
     }
 
     if (mine) {
-      const { error: updErr } = await sbClient.from("members").update({ name, avatar_path: avatarPath }).eq("id", mine.id);
+      const { error: updErr } = await sbClient.from("members").update({ name, bio, avatar_path: avatarPath }).eq("id", mine.id);
       if (updErr) throw updErr;
       logActivity("updated their profile", name);
     } else {
       const { error: insErr } = await sbClient.from("members").insert({
-        name, avatar_path: avatarPath, user_id: currentUser.id, created_at: new Date().toISOString()
+        name, bio, avatar_path: avatarPath, user_id: currentUser.id, created_at: new Date().toISOString()
       });
       if (insErr) throw insErr;
       logActivity("joined the team", name);

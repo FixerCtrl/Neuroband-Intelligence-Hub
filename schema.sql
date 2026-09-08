@@ -35,8 +35,20 @@ create table if not exists members (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   avatar_path text,
+  bio text,
+  user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
+
+-- Add columns to members created before these updates (safe to re-run)
+alter table members add column if not exists bio text;
+
+-- Add user_id to members created before this update (safe to re-run)
+alter table members add column if not exists user_id uuid references auth.users(id) on delete set null;
+
+-- One profile per signed-in user — enforced at the database level
+-- so it can't be bypassed even outside the app's UI.
+create unique index if not exists members_user_id_unique on members(user_id) where user_id is not null;
 
 -- Table: tasks (Team tab — work assignment)
 create table if not exists tasks (
@@ -48,6 +60,16 @@ create table if not exists tasks (
   assigned_by uuid references members(id) on delete set null,
   status text not null default 'To do',
   due_date date,
+  created_at timestamptz default now()
+);
+
+-- Table: activity_log (append-only audit trail — nothing can
+-- update or delete rows here, not even admins, by design)
+create table if not exists activity_log (
+  id uuid primary key default gen_random_uuid(),
+  actor_email text,
+  action text not null,
+  details text,
   created_at timestamptz default now()
 );
 
@@ -103,9 +125,15 @@ drop policy if exists "Public read on members" on members;
 drop policy if exists "Authenticated insert on members" on members;
 drop policy if exists "Authenticated update on members" on members;
 drop policy if exists "Admin delete on members" on members;
+drop policy if exists "Users insert own member profile" on members;
+drop policy if exists "Users or admin update member profile" on members;
 create policy "Public read on members" on members for select using (true);
-create policy "Authenticated insert on members" on members for insert with check (auth.role() = 'authenticated');
-create policy "Authenticated update on members" on members for update using (auth.role() = 'authenticated');
+-- Each signed-in user may only create a member row for themselves.
+create policy "Users insert own member profile" on members for insert
+  with check (auth.role() = 'authenticated' and user_id = auth.uid());
+-- Users can edit their own profile; admins can edit anyone's.
+create policy "Users or admin update member profile" on members for update
+  using (user_id = auth.uid() or is_admin());
 create policy "Admin delete on members" on members for delete using (is_admin());
 
 drop policy if exists "Allow all read on tasks" on tasks;
@@ -154,3 +182,42 @@ create policy "Authenticated upload on avatars bucket" on storage.objects
   for insert with check (bucket_id = 'avatars' and auth.role() = 'authenticated');
 create policy "Authenticated update on avatars bucket" on storage.objects
   for update using (bucket_id = 'avatars' and auth.role() = 'authenticated');
+
+-- ------------------------------------------------------------
+-- ACTIVITY LOG: row level security
+-- Anyone can read it (transparency). Any signed-in user can add
+-- an entry (the app does this automatically). Nobody — not even
+-- admins — can update or delete rows: no update/delete policy is
+-- defined at all, so Postgres blocks both by default. This makes
+-- the audit trail tamper-proof once written.
+-- ------------------------------------------------------------
+alter table activity_log enable row level security;
+drop policy if exists "Public read on activity_log" on activity_log;
+drop policy if exists "Authenticated insert on activity_log" on activity_log;
+create policy "Public read on activity_log" on activity_log for select using (true);
+create policy "Authenticated insert on activity_log" on activity_log for insert with check (auth.role() = 'authenticated');
+
+-- ------------------------------------------------------------
+-- REAL-TIME SYNC
+-- Adds these tables to Supabase's realtime publication so every
+-- open browser tab receives live updates automatically. Safe to
+-- re-run — skips any table already added.
+-- ------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'entries') then
+    alter publication supabase_realtime add table entries;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'members') then
+    alter publication supabase_realtime add table members;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'tasks') then
+    alter publication supabase_realtime add table tasks;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'documents') then
+    alter publication supabase_realtime add table documents;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'activity_log') then
+    alter publication supabase_realtime add table activity_log;
+  end if;
+end $$;
