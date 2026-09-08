@@ -705,7 +705,7 @@ function openDetail(entry){
     <div class="detail-field"><div class="k">Date published / collected</div><div class="v">${entry.date_published || "—"} / ${entry.date_collected || "—"}</div></div>
     <div class="detail-field"><div class="k">Type of source</div><div class="v">${escapeHtml(entry.source_type)}</div></div>
     <div class="detail-field"><div class="k">Relevance to KIQ</div><div class="v">${escapeHtml(entry.relevance)}</div></div>
-    <div class="detail-field"><div class="k">File name</div><div class="v" style="font-family:var(--font-mono); font-size:12px;">${escapeHtml(entry.file_name || "")}</div></div>
+    <div class="detail-field"><div class="k">File name</div><div class="v" style="font-family:var(--font-sans); font-size:12px;">${escapeHtml(entry.file_name || "")}</div></div>
     ${fileUrl ? `<a class="detail-file-link" href="${fileUrl}" target="_blank" rel="noopener">Open extract →</a>` : ""}
   `;
   document.getElementById("close-detail").addEventListener("click", closeDetail);
@@ -1304,6 +1304,7 @@ function renderTasks(){
           <option${t.status === "Done" ? " selected" : ""}>Done</option>
         </select>
         ${canReassign ? `<button class="btn btn-ghost btn-small task-reassign" data-task-id="${t.id}">Edit assignment</button>` : ""}
+        ${canReassign ? `<button class="btn btn-danger-ghost btn-small task-delete" data-task-id="${t.id}">Delete task</button>` : ""}
       </div>
       <div class="task-channel">
         <div class="task-channel-head"><strong>Team channel</strong><span>${comments.length} comment${comments.length === 1 ? "" : "s"}</span></div>
@@ -1365,6 +1366,21 @@ function renderTasks(){
         console.error(err);
         alert("Could not reassign task: " + (err.message || err));
       }
+    });
+  });
+
+  list.querySelectorAll(".task-delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const task = currentTasks.find(item => String(item.id) === String(btn.dataset.taskId));
+      if (!task || !canManageLeadership()) return;
+      if (!confirm(`Delete the task "${task.title}" and its discussion?`)) return;
+      const { error } = await sbClient.from("tasks").delete().eq("id", task.id);
+      if (error) {
+        alert("Could not delete task: " + error.message);
+        return;
+      }
+      logActivity("deleted a task", `"${task.title}"`);
+      await loadTasks();
     });
   });
 
