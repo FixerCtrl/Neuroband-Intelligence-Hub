@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Neuroband Intelligence Hub - Insight Consulting</title>
+<title>Insight Consulting — Neuroband Intelligence Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
@@ -16,8 +16,8 @@
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-text">
-        <span class="brand-name">Neuroband</span>
-        <span class="brand-sub">Intelligence Hub - Insight Consulting</span>
+        <span class="brand-name">Insight Consulting</span>
+        <span class="brand-sub">Neuroband Intelligence Hub</span>
       </div>
       <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">☾</button>
     </div>
@@ -27,6 +27,7 @@
       <button class="nav-item" data-tab="plan">Collection Plan</button>
       <button class="nav-item" data-tab="repository">Repository</button>
       <button class="nav-item" data-tab="team">Team</button>
+      <button class="nav-item" data-tab="activity">Activity</button>
       <button class="nav-item" data-tab="manual">Manual</button>
     </nav>
 
@@ -117,6 +118,17 @@
       <p class="empty-state is-hidden" id="task-empty-state">No tasks assigned yet.</p>
     </section>
 
+    <!-- ACTIVITY -->
+    <section class="panel" id="panel-activity">
+      <header class="panel-head">
+        <p class="eyebrow">Audit trail</p>
+        <h1>Activity</h1>
+      </header>
+      <p class="hint" style="margin-top:-20px; margin-bottom:28px;">A permanent, append-only record of changes to this system — nobody, including admins, can edit or delete entries here. Updates live automatically as your group works.</p>
+      <div class="activity-list" id="activity-list"></div>
+      <p class="empty-state is-hidden" id="activity-empty-state">No activity recorded yet.</p>
+    </section>
+
     <!-- MANUAL -->
     <section class="panel" id="panel-manual">
       <header class="panel-head">
@@ -205,7 +217,7 @@
 <div class="modal-overlay is-hidden" id="member-modal-overlay">
   <div class="modal">
     <div class="modal-head">
-      <h2>Add a group member</h2>
+      <h2 id="member-modal-title">Add a group member</h2>
       <button class="modal-close" id="close-add-member">&times;</button>
     </div>
     <form id="member-form">

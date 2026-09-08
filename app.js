@@ -61,6 +61,7 @@ let currentEntries = [];
 let currentMembers = [];
 let currentTasks = [];
 let currentUser = null;
+let currentActivity = [];
 
 // ---------- INIT ----------
 document.addEventListener("DOMContentLoaded", () => {
@@ -81,6 +82,8 @@ document.addEventListener("DOMContentLoaded", () => {
   loadEntries();
   loadMembers();
   loadTasks();
+  loadActivity();
+  initRealtime();
 });
 
 // ============================================================
@@ -313,6 +316,7 @@ async function saveDocument(slug){
   toggleEdit(slug, false);
   if (sbClient) {
     await sbClient.from("documents").upsert({ slug, content: newContent, updated_at: new Date().toISOString() });
+    logActivity("edited the " + (slug === "manual" ? "Manual" : "Collection Plan"));
   }
 }
 
@@ -529,6 +533,8 @@ async function submitEntry(e){
     const { error: insertError } = await sbClient.from("entries").insert(record);
     if (insertError) throw insertError;
 
+    logActivity("added a source", `${record.source} (${record.kin}_${record.kiq})`);
+
     status.textContent = "Saved.";
     status.className = "form-status is-success";
     await loadEntries();
@@ -565,13 +571,14 @@ function renderMembers(){
     const card = document.createElement("div");
     card.className = "member-card";
     const avatarUrl = getPublicAvatarUrl(m.avatar_path);
+    const canEditPhoto = currentUser && (m.user_id === currentUser.id || isAdmin);
     card.innerHTML = `
       ${isAdmin ? `<button class="member-remove" title="Remove member" data-remove-member="${m.id}">&times;</button>` : ""}
-      <div class="member-avatar" data-avatar-for="${m.id}" title="Click to change photo">
+      <div class="member-avatar" ${canEditPhoto ? `data-avatar-for="${m.id}" title="Click to change photo"` : ""} style="${canEditPhoto ? "" : "cursor:default;"}">
         ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
       </div>
-      <div class="member-name">${escapeHtml(m.name)}</div>
-      <div class="member-avatar-hint">Click photo to update</div>
+      <div class="member-name">${escapeHtml(m.name)}${m.user_id ? "" : ` <span style="color:var(--text-faint); font-weight:400; font-size:11px;">(unclaimed)</span>`}</div>
+      ${canEditPhoto ? `<div class="member-avatar-hint">Click photo to update</div>` : ""}
     `;
     grid.appendChild(card);
   });
@@ -582,6 +589,8 @@ function renderMembers(){
   grid.querySelectorAll("[data-remove-member]").forEach(el => {
     el.addEventListener("click", () => removeMember(el.dataset.removeMember));
   });
+
+  updateAddMemberButtonLabel();
 }
 
 function getPublicAvatarUrl(path){
@@ -590,9 +599,25 @@ function getPublicAvatarUrl(path){
   return data ? data.publicUrl : null;
 }
 
+function myMemberProfile(){
+  if (!currentUser) return null;
+  return currentMembers.find(m => m.user_id === currentUser.id) || null;
+}
+
+function updateAddMemberButtonLabel(){
+  const btn = document.getElementById("open-add-member");
+  if (!btn) return;
+  const mine = myMemberProfile();
+  btn.textContent = mine ? "Edit my profile" : "+ Add myself";
+}
+
 function wireMemberModal(){
   document.getElementById("open-add-member").addEventListener("click", () => {
     if (!requireAuth()) return;
+    const mine = myMemberProfile();
+    document.getElementById("member-modal-title").textContent = mine ? "Edit my profile" : "Add yourself to the team";
+    document.getElementById("m-name").value = mine ? mine.name : "";
+    document.getElementById("submit-member").textContent = mine ? "Save changes" : "Add me";
     document.getElementById("member-modal-overlay").classList.remove("is-hidden");
   });
   document.getElementById("close-add-member").addEventListener("click", closeAddMemberModal);
@@ -619,26 +644,41 @@ async function submitMember(e){
 
   const name = document.getElementById("m-name").value;
   const file = document.getElementById("m-avatar").files[0];
+  const mine = myMemberProfile();
   status.textContent = "Saving…";
   status.className = "form-status";
 
   try {
-    let avatarPath = null;
+    let avatarPath = mine ? mine.avatar_path : null;
     if (file) {
       avatarPath = `member_${Date.now()}_${slugifySource(name)}.${file.name.split(".").pop()}`;
       const { error: upErr } = await sbClient.storage.from("avatars").upload(avatarPath, file, { upsert: true });
       if (upErr) throw upErr;
     }
-    const { error: insErr } = await sbClient.from("members").insert({ name, avatar_path: avatarPath, created_at: new Date().toISOString() });
-    if (insErr) throw insErr;
 
-    status.textContent = "Added.";
+    if (mine) {
+      const { error: updErr } = await sbClient.from("members").update({ name, avatar_path: avatarPath }).eq("id", mine.id);
+      if (updErr) throw updErr;
+      logActivity("updated their profile", name);
+    } else {
+      const { error: insErr } = await sbClient.from("members").insert({
+        name, avatar_path: avatarPath, user_id: currentUser.id, created_at: new Date().toISOString()
+      });
+      if (insErr) throw insErr;
+      logActivity("joined the team", name);
+    }
+
+    status.textContent = "Saved.";
     status.className = "form-status is-success";
     await loadMembers();
     setTimeout(closeAddMemberModal, 400);
   } catch (err) {
     console.error(err);
-    status.textContent = "Something went wrong: " + (err.message || err);
+    if ((err.message || "").toLowerCase().includes("duplicate")) {
+      status.textContent = "You already have a profile — refresh and use 'Edit my profile' instead.";
+    } else {
+      status.textContent = "Something went wrong: " + (err.message || err);
+    }
     status.className = "form-status is-error";
   }
 }
@@ -674,7 +714,9 @@ async function handleAvatarReupload(e){
 async function removeMember(memberId){
   if (!requireAuth()) return;
   if (!confirm("Remove this member? Tasks assigned to them will remain but show as unassigned.")) return;
+  const member = currentMembers.find(m => m.id === memberId);
   await sbClient.from("members").delete().eq("id", memberId);
+  logActivity("removed a team member", member ? member.name : undefined);
   await loadMembers();
   await loadTasks();
 }
@@ -698,6 +740,12 @@ function personInlineHtml(memberId, fallback){
   return `<span class="person-inline"><span class="person-avatar-mini">${url ? `<img src="${url}" alt="" />` : initials(m.name)}</span>${escapeHtml(m.name)}</span>`;
 }
 
+function statusClass(status){
+  if (status === "In progress") return "status-progress";
+  if (status === "Done") return "status-done";
+  return "status-todo";
+}
+
 function renderTasks(){
   const list = document.getElementById("task-list");
   list.innerHTML = "";
@@ -716,7 +764,7 @@ function renderTasks(){
         <div class="task-people">${personInlineHtml(t.assigned_to)} ← assigned by ${personInlineHtml(t.assigned_by)}</div>
       </div>
       <span class="task-due">${t.due_date ? "Due " + t.due_date : ""}</span>
-      <select class="task-status" data-task-id="${t.id}">
+      <select class="task-status ${statusClass(t.status)}" data-task-id="${t.id}" data-prev-value="${t.status}">
         <option${t.status === "To do" ? " selected" : ""}>To do</option>
         <option${t.status === "In progress" ? " selected" : ""}>In progress</option>
         <option${t.status === "Done" ? " selected" : ""}>Done</option>
@@ -727,7 +775,8 @@ function renderTasks(){
 
   list.querySelectorAll(".task-status").forEach(sel => {
     sel.addEventListener("change", (e) => {
-      if (!requireAuth()) { e.target.value = e.target.dataset.prevValue || e.target.value; renderTasks(); return; }
+      if (!requireAuth()) { e.target.value = e.target.dataset.prevValue || e.target.value; return; }
+      e.target.className = "task-status " + statusClass(e.target.value);
       updateTaskStatus(e.target.dataset.taskId, e.target.value);
     });
   });
@@ -738,6 +787,7 @@ async function updateTaskStatus(taskId, status){
   await sbClient.from("tasks").update({ status }).eq("id", taskId);
   const t = currentTasks.find(x => x.id === taskId);
   if (t) t.status = status;
+  logActivity("changed task status", t ? `"${t.title}" → ${status}` : `→ ${status}`);
 }
 
 function populateTaskPeopleDropdowns(){
@@ -809,6 +859,8 @@ async function submitTask(e){
   try {
     const { error } = await sbClient.from("tasks").insert(record);
     if (error) throw error;
+    const assignee = memberById(record.assigned_to);
+    logActivity("assigned a task", `"${record.title}" to ${assignee ? assignee.name : "someone"}`);
     status.textContent = "Assigned.";
     status.className = "form-status is-success";
     await loadTasks();
@@ -818,6 +870,92 @@ async function submitTask(e){
     status.textContent = "Something went wrong: " + (err.message || err);
     status.className = "form-status is-error";
   }
+}
+
+// ============================================================
+// ACTIVITY LOG (append-only audit trail)
+// ============================================================
+async function logActivity(action, details){
+  if (!sbClient || !currentUser) return;
+  try {
+    await sbClient.from("activity_log").insert({
+      actor_email: currentUser.email,
+      action,
+      details: details || null,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("Activity log failed (non-fatal):", err);
+  }
+}
+
+async function loadActivity(){
+  if (!sbClient) { renderActivity(); return; }
+  const { data, error } = await sbClient.from("activity_log").select("*").order("created_at", { ascending: false }).limit(200);
+  if (!error && data) currentActivity = data;
+  renderActivity();
+}
+
+function relativeTime(isoString){
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min${mins === 1 ? "" : "s"} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function renderActivity(){
+  const list = document.getElementById("activity-list");
+  list.innerHTML = "";
+  document.getElementById("activity-empty-state").classList.toggle("is-hidden", currentActivity.length !== 0);
+
+  currentActivity.forEach(a => {
+    const item = document.createElement("div");
+    item.className = "activity-item";
+    item.innerHTML = `
+      <span class="activity-dot"></span>
+      <div class="activity-body">
+        <div class="activity-line"><span class="activity-actor">${escapeHtml(a.actor_email || "Someone")}</span> ${escapeHtml(a.action)}${a.details ? ` — ${escapeHtml(a.details)}` : ""}</div>
+        <div class="activity-time">${relativeTime(a.created_at)}</div>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+// ============================================================
+// REAL-TIME SYNC
+// Subscribes to database changes so every open browser tab
+// updates automatically, without anyone refreshing.
+// ============================================================
+function initRealtime(){
+  if (!sbClient) return;
+
+  sbClient.channel("public:entries")
+    .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, () => loadEntries())
+    .subscribe();
+
+  sbClient.channel("public:members")
+    .on("postgres_changes", { event: "*", schema: "public", table: "members" }, () => loadMembers())
+    .subscribe();
+
+  sbClient.channel("public:tasks")
+    .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => loadTasks())
+    .subscribe();
+
+  sbClient.channel("public:documents")
+    .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, (payload) => {
+      const slug = (payload.new && payload.new.slug) || (payload.old && payload.old.slug);
+      if (slug) loadDocument(slug);
+    })
+    .subscribe();
+
+  sbClient.channel("public:activity_log")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, () => loadActivity())
+    .subscribe();
 }
 
 // ---------- UTIL ----------
