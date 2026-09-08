@@ -821,7 +821,6 @@ function initials(name){
 function renderMembers(){
   const grid = document.getElementById("member-grid");
   const directoryNote = document.getElementById("team-directory-note");
-  const addMemberButton = document.getElementById("open-add-member");
   grid.innerHTML = "";
   const canModerate = canManageLeadership();
   const visibleMembers = canModerate
@@ -831,7 +830,6 @@ function renderMembers(){
     directoryNote.textContent = canModerate ? "Admin view: presence and login history are visible only to admins." : "Your profile is shown above. Other team members are listed here.";
     directoryNote.classList.toggle("is-hidden", visibleMembers.length === 0);
   }
-  if (addMemberButton) addMemberButton.classList.toggle("is-hidden", !canModerate);
   visibleMembers.forEach(m => {
     const card = document.createElement("div");
     card.className = "member-card";
@@ -860,7 +858,6 @@ function renderMembers(){
     el.addEventListener("click", () => openMemberEditor(el.dataset.editMember));
   });
 
-  updateAddMemberButtonLabel();
   renderYourProfile();
 }
 
@@ -898,26 +895,49 @@ function renderYourProfile(){
         <button class="btn btn-primary" id="your-profile-add-btn">+ Add myself</button>
       </div>
     `;
-    document.getElementById("your-profile-add-btn").addEventListener("click", () => document.getElementById("open-add-member").click());
+    document.getElementById("your-profile-add-btn").addEventListener("click", openOwnProfileEditor);
     return;
   }
 
   const avatarUrl = getPublicAvatarUrl(mine.avatar_path);
   slot.innerHTML = `
-    <div class="your-profile-card">
-      <div class="your-profile-avatar" id="your-profile-avatar-click" title="Click to change photo">
-        ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(mine.name)}" />` : initials(mine.name)}
+    <div class="profile-workspace">
+      <div class="your-profile-card">
+        <div class="your-profile-avatar" id="your-profile-avatar-click" title="Click to change photo">
+          ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(mine.name)}" />` : initials(mine.name)}
+        </div>
+        <div class="your-profile-text">
+          <div class="your-profile-kicker">Signed in as${admin ? " · ADMIN" : ""}</div>
+          <div class="your-profile-name">${escapeHtml(mine.name)}</div>
+          ${mine.bio ? `<div class="your-profile-bio">${escapeHtml(mine.bio)}</div>` : `<div class="your-profile-bio">${escapeHtml(currentUser.email)}</div>`}
+        </div>
+        <button class="btn btn-ghost" id="your-profile-edit-btn">Edit profile</button>
       </div>
-      <div class="your-profile-text">
-        <div class="your-profile-kicker">Signed in as${admin ? " · ADMIN" : ""}</div>
-        <div class="your-profile-name">${escapeHtml(mine.name)}</div>
-        ${mine.bio ? `<div class="your-profile-bio">${escapeHtml(mine.bio)}</div>` : `<div class="your-profile-bio">${escapeHtml(currentUser.email)}</div>`}
-      </div>
-      <button class="btn btn-ghost" id="your-profile-edit-btn">Edit profile</button>
+      <section class="my-work" aria-labelledby="my-work-title">
+        <div class="my-work-head">
+          <div>
+            <p class="eyebrow">Personal dashboard</p>
+            <h2 id="my-work-title">My work</h2>
+          </div>
+          <div class="my-work-counts" id="my-work-counts"></div>
+        </div>
+        <div class="my-work-list" id="my-work-list"></div>
+        <p class="empty-state is-hidden" id="my-work-empty">You have no open tasks right now.</p>
+      </section>
     </div>
   `;
-  document.getElementById("your-profile-edit-btn").addEventListener("click", () => document.getElementById("open-add-member").click());
+  document.getElementById("your-profile-edit-btn").addEventListener("click", openOwnProfileEditor);
   document.getElementById("your-profile-avatar-click").addEventListener("click", () => reuploadAvatar(mine.id));
+}
+
+function openOwnProfileEditor(){
+  if (!requireAuth()) return;
+  const mine = myMemberProfile();
+  document.getElementById("member-modal-title").textContent = mine ? "Edit profile" : "Complete profile";
+  document.getElementById("m-name").value = mine ? mine.name : "";
+  document.getElementById("m-bio").value = mine ? (mine.bio || "") : "";
+  document.getElementById("submit-member").textContent = mine ? "Save changes" : "Create profile";
+  document.getElementById("member-modal-overlay").classList.remove("is-hidden");
 }
 
 function isMemberOnline(member){
@@ -976,23 +996,7 @@ function myMemberProfile(){
   return currentMembers.find(m => m.user_id === currentUser.id) || null;
 }
 
-function updateAddMemberButtonLabel(){
-  const btn = document.getElementById("open-add-member");
-  if (!btn) return;
-  const mine = myMemberProfile();
-  btn.textContent = mine ? "Edit my profile" : "+ Add myself";
-}
-
 function wireMemberModal(){
-  document.getElementById("open-add-member").addEventListener("click", () => {
-    if (!requireAuth()) return;
-    const mine = myMemberProfile();
-    document.getElementById("member-modal-title").textContent = mine ? "Edit my profile" : "Add yourself to the team";
-    document.getElementById("m-name").value = mine ? mine.name : "";
-    document.getElementById("m-bio").value = mine ? (mine.bio || "") : "";
-    document.getElementById("submit-member").textContent = mine ? "Save changes" : "Add me";
-    document.getElementById("member-modal-overlay").classList.remove("is-hidden");
-  });
   document.getElementById("close-add-member").addEventListener("click", closeAddMemberModal);
   document.getElementById("cancel-add-member").addEventListener("click", closeAddMemberModal);
   document.getElementById("member-modal-overlay").addEventListener("click", (e) => {
@@ -1065,7 +1069,7 @@ async function submitMember(e){
   } catch (err) {
     console.error(err);
     if ((err.message || "").toLowerCase().includes("duplicate")) {
-      status.textContent = "You already have a profile — refresh and use 'Edit my profile' instead.";
+      status.textContent = "You already have a profile. Use the Edit profile button in your profile card.";
     } else {
       status.textContent = "Something went wrong: " + (err.message || err);
     }
