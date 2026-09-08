@@ -351,10 +351,10 @@ body::before{
 
 /* ---------- TEAM TAB: tasks ---------- */
 .task-view-controls{ display:flex; align-items:center; gap:4px; flex-wrap:wrap; margin:-4px 0 14px; padding:3px; width:max-content; max-width:100%; border:1px solid var(--border-soft); border-radius:var(--radius-s); background:var(--surface); }
-.task-view-btn{ border:0; border-radius:var(--radius-s); background:transparent; color:var(--text-muted); cursor:pointer; padding:7px 10px; font:700 11px var(--font-sans); }
+.task-view-btn{ height:32px; border:0; border-radius:var(--radius-s); background:transparent; color:var(--text-muted); cursor:pointer; padding:0 10px; display:inline-flex; align-items:center; justify-content:center; font:700 11px var(--font-sans); white-space:nowrap; }
 .task-view-btn:hover{ color:var(--text); background:var(--bg); }
 .task-view-btn.is-active{ background:var(--text); color:var(--surface-raised); }
-.task-assign-btn{ margin-left:4px; border:0; border-left:1px solid var(--border-soft); border-radius:var(--radius-s); background:transparent; color:var(--text-muted); cursor:pointer; padding:7px 10px; font:700 11px var(--font-sans); white-space:nowrap; transition:color .2s ease, background-color .2s ease, box-shadow .2s ease; }
+.task-assign-btn{ height:32px; margin-left:4px; border:0; border-left:1px solid var(--border-soft); border-radius:var(--radius-s); background:transparent; color:var(--text-muted); cursor:pointer; padding:0 10px; display:inline-flex; align-items:center; justify-content:center; font:700 11px var(--font-sans); white-space:nowrap; transition:color .2s ease, background-color .2s ease, box-shadow .2s ease; }
 .task-assign-btn:hover{ color:var(--text); background:var(--bg); box-shadow:0 3px 9px rgba(52, 47, 40, 0.1); }
 .task-list{ display:flex; flex-direction:column; gap:10px; }
 .task-card{ background: var(--surface); border:1px solid var(--border-soft); border-radius: var(--radius-m); padding:16px 18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; transition: border-color 0.15s ease; box-shadow: 0 8px 18px rgba(52, 47, 40, 0.04); }
@@ -377,11 +377,12 @@ body::before{
 .task-comment-form input{ flex:1; min-width:0; margin:0; padding:7px 9px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:var(--radius-s); font-size:12px; }
 .task-comment-form input:focus{ outline:2px solid var(--accent-dim); border-color:var(--accent); }
 .btn + .btn, .modal-actions, .section-subhead{ gap:10px; }
-.task-actions{ display:flex; align-items:center; gap:10px; }
+.task-actions{ display:flex; align-items:center; gap:10px; margin-left:auto; }
 .task-status{
   background: var(--bg); border:1px solid var(--border); color: var(--text);
-  padding:6px 10px; border-radius: var(--radius-s); font-size:12.5px; flex-shrink:0; font-family: var(--font-sans); font-weight:700;
+  height:32px; padding:0 10px; border-radius: var(--radius-s); font-size:12.5px; flex-shrink:0; font-family: var(--font-sans); font-weight:700;
 }
+.task-actions .btn{ height:32px; display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; }
 .task-status.status-todo{ background: var(--surface); color: var(--text-muted); border-color: var(--border); }
 .task-status.status-progress{ background: var(--accent-dim); color: var(--accent-ink); border-color: var(--accent); }
 .task-status.status-done{ background: var(--success-dim); color: var(--success); border-color: var(--success); }
@@ -510,7 +511,7 @@ body::before{
   .section-subhead .btn{ flex-shrink:0; }
   .task-card{ align-items:flex-start; padding:14px; gap:10px; }
   .task-main{ flex-basis:100%; }
-  .task-actions{ width:100%; justify-content:flex-end; }
+  .task-actions{ width:100%; justify-content:flex-end; margin-left:0; }
   .task-status{ width:auto; }
   .task-reassign{ margin-left:auto; }
   .doc-block{ padding:18px; }
