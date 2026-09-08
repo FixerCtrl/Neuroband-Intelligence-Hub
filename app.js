@@ -839,6 +839,8 @@ async function loadMembers(){
   renderMembers();
   renderAuthBox(); // members just loaded, so the sidebar can now show your claimed avatar/name
   populateTaskPeopleDropdowns();
+  renderTasks();
+  renderNotifications();
 }
 
 function initials(name){
@@ -1161,7 +1163,12 @@ async function loadTasks(){
 async function loadTaskComments(){
   if (!sbClient) return;
   const { data, error } = await sbClient.from("task_comments").select("*").order("created_at", { ascending: true });
-  if (!error && data) currentTaskComments = data;
+  if (error) {
+    console.error("Could not load task comments:", error.message);
+    return;
+  }
+  if (data) currentTaskComments = data;
+  renderNotifications();
 }
 
 function memberById(id){ return currentMembers.find(m => m.id === id); }
@@ -1431,7 +1438,7 @@ async function submitTaskComment(event, taskId){
     created_at: new Date().toISOString()
   });
   if (error) {
-    alert("Could not send the comment: " + error.message);
+    alert("Could not send the comment. Please ask the admin to run the latest schema.sql migration.\n\n" + error.message);
     return;
   }
   event.currentTarget.reset();
