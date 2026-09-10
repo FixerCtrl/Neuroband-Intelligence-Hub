@@ -1640,7 +1640,7 @@ function renderActivity(){
 
   list.querySelectorAll("[data-edit-activity-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!canManageActivities()) return;
+      if (!canManageActivities) return;
       const activity = currentActivity.find(a => String(a.id) === btn.dataset.editActivityId);
       if (!activity) return;
       const original = `${activity.action}${activity.details ? ` — ${activity.details}` : ""}`;
@@ -1655,7 +1655,7 @@ function renderActivity(){
 
   list.querySelectorAll("[data-delete-activity-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!canManageActivities()) return;
+      if (!canManageActivities) return;
       if (!confirm("Delete this activity entry?")) return;
       await sbClient.from("activity_log").delete().eq("id", btn.dataset.deleteActivityId);
       await loadActivity();
