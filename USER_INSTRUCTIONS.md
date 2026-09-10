@@ -9,9 +9,10 @@
 3. [Phase 2: Collection Plan](#phase-2-collection-plan)
 4. [Phase 3: Adding Data to the Repository](#phase-3-adding-data-to-the-repository)
 5. [Phase 4: Team Collaboration](#phase-4-team-collaboration)
-6. [Phase 5: Retrieving & Analyzing Your Data](#phase-5-retrieving--analyzing-your-data)
-7. [Preparing for Your Presentation](#preparing-for-your-presentation)
-8. [Troubleshooting](#troubleshooting)
+6. [My Work Dashboard](#my-work-dashboard)
+7. [Phase 5: Retrieving & Analyzing Your Data](#phase-5-retrieving--analyzing-your-data)
+8. [Preparing for Your Presentation](#preparing-for-your-presentation)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -272,6 +273,128 @@ The **Team tab** helps divide work and track progress.
 - **Alice:** "Collect all KIN1 sources (competitor product strategy)"
 - **Bob:** "Collect all KIN2 sources (market and consumer sentiment)"
 - **Carol:** "Collect all KIN3 sources (regulatory environment)"
+
+---
+
+## My Work Dashboard
+
+### Why This Matters
+The **My Work dashboard** is your personal task management center. It helps you track your assignments, manage deadlines, and stay on top of your team's workflow without needing to navigate through multiple sections.
+
+### Accessing Your Dashboard
+
+1. Click the **My Work** tab in the left sidebar (visible after you sign in and claim your team profile).
+2. Once you've claimed your profile, you'll see:
+   - **Summary cards** showing your task statistics
+   - **Interactive calendar** for the current month with visual due date indicators
+   - **Task list** with filtering and sorting options
+
+### Summary Cards: At a Glance
+
+Your dashboard displays four key metrics:
+
+| Card | What It Shows | When It's Useful |
+|------|---------------|------------------|
+| **Open** | Number of tasks assigned to you that aren't complete | Daily check-in to see workload |
+| **Due soon** | Tasks due within the next 7 days | Plan your week |
+| **Completed** | Tasks you've marked as Done | Track your progress |
+| **Overdue** | Tasks past their due date (shown in red alert) | Identify blocked work |
+| **New** | Newly assigned tasks or tasks with new comments (shown in red alert) | Stay responsive to your team |
+
+### Calendar View: Visualize Your Schedule
+
+The interactive calendar shows:
+
+- **Month navigation:** Click **←** and **→** to browse past and future months
+- **Day indicators:** Numbers in the calendar show how many tasks are due on each day
+- **Today highlighting:** Today's date is shown with a special highlight
+- **Task highlighting:** Days with tasks are shown with a colored background
+- **Clickable days:** Click any day to scroll to tasks due on that date
+
+**How to use it:**
+- Quickly see which days have task deadlines
+- Identify your busiest weeks
+- Plan ahead by looking at future months
+- Click a day with tasks to jump directly to it in the task list
+
+### Task List: Manage Your Work
+
+The task list displays all your assigned tasks, with these features:
+
+#### Filtering Options
+Use the **filter dropdown** to focus on what matters most:
+
+- **All tasks** — Show every task assigned to you
+- **Open tasks** — Only tasks you haven't completed yet
+- **Overdue** — Tasks past their due date (needs attention!)
+- **Due soon** — Tasks due within 7 days
+- **Completed** — Tasks you've finished
+
+#### Task Cards: What You See
+
+Each task card shows:
+
+- **Task title** — The name of your assignment
+- **Badges** — "New assignment" and "New message" badges for recent updates
+- **Status** — Current status (To do, In progress, Done) with a color-coded label
+- **Due date** — When the task is due (in red if overdue)
+- **"Open task" link** — Click to see full details and comments
+
+#### Updating Your Tasks
+
+From the task list:
+1. Click **Open task →** to open the full task card in the Team section
+2. There you can:
+   - Change your task status (To do → In progress → Done)
+   - Add or read team channel comments
+   - See who assigned it to you
+
+### Team Visibility: For Managers/Assigners
+
+If you're assigning tasks to your team:
+
+1. Go to the **Team tab**
+2. Use the **"All tasks"** view to see the complete picture:
+   - Which team members have the most open work
+   - Which tasks need attention (filters available)
+   - Task progress at a glance
+
+3. Click **"Edit assignment"** on any task to reassign or adjust deadlines
+4. Use the **Analysis tab** to see overall task progress and team workload
+
+### Best Practices for Task Management
+
+**For task assignees:**
+- Check your **My Work** dashboard daily
+- Filter by **"Due soon"** to plan your week
+- Mark tasks **In progress** as you start them (helps your team know you're on it)
+- Add comments if you have questions or blockers
+- Mark complete as soon as you're done
+
+**For team leads:**
+- Check the **Team tab** regularly to monitor progress
+- Reassign tasks if someone is overloaded
+- Use the **Analysis tab** to see if deadlines are realistic
+- Communicate in task comments to keep decisions documented
+- Celebrate task completions! 🎉
+
+### Example: Your Daily Workflow
+
+**Morning:**
+1. Click **My Work** tab
+2. Check summary cards — spot any overdue tasks
+3. Filter by **"Due soon"** to see what's coming this week
+4. Check calendar to see when deadlines cluster
+
+**During the day:**
+1. Update task status to **In progress** as you work
+2. Add comments if you hit blockers or finish parts of a task
+3. Click task card to see team comments and context
+
+**End of day:**
+1. Mark tasks **Done** as you complete them
+2. Check for new assignments or team messages
+3. Plan tomorrow based on the calendar and your task list
 
 ---
 

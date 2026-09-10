@@ -32,6 +32,7 @@
     <nav class="nav">
       <div class="nav-group nav-primary" aria-label="Workspace">
         <button class="nav-item is-active" data-tab="overview">Overview</button>
+        <button class="nav-item" data-tab="my-work">My Work</button>
         <button class="nav-item" data-tab="analysis">Analysis</button>
         <button class="nav-item" data-tab="plan">Collection Plan</button>
         <button class="nav-item" data-tab="repository">Repository</button>
@@ -73,6 +74,44 @@
       </header>
 
       <div class="kin-grid" id="kin-grid"></div>
+    </section>
+
+    <!-- MY WORK DASHBOARD -->
+    <section class="panel" id="panel-my-work">
+      <header class="panel-head">
+        <p class="eyebrow">Personal workspace</p>
+        <h1>My Work</h1>
+      </header>
+
+      <div class="my-work-summary" id="my-work-counts"></div>
+
+      <div class="my-work-layout">
+        <!-- Calendar Section -->
+        <div class="my-work-calendar-section">
+          <div class="my-work-calendar-controls">
+            <button id="calendar-prev-month" class="btn btn-ghost btn-small" aria-label="Previous month">←</button>
+            <h2 id="calendar-month-year"></h2>
+            <button id="calendar-next-month" class="btn btn-ghost btn-small" aria-label="Next month">→</button>
+          </div>
+          <div class="my-work-calendar" id="my-work-calendar"></div>
+        </div>
+
+        <!-- Tasks Section -->
+        <div class="my-work-tasks-section">
+          <div class="my-work-section-head">
+            <h2>Your Tasks</h2>
+            <select id="my-work-filter" class="btn btn-ghost btn-small">
+              <option value="all">All tasks</option>
+              <option value="open">Open tasks</option>
+              <option value="overdue">Overdue</option>
+              <option value="due-soon">Due soon (7 days)</option>
+              <option value="done">Completed</option>
+            </select>
+          </div>
+          <div class="my-work-list" id="my-work-list"></div>
+          <p class="empty-state is-hidden" id="my-work-empty">No tasks assigned to you yet. Tasks you're assigned to will appear here.</p>
+        </div>
+      </div>
     </section>
 
     <!-- COLLECTION PLAN -->

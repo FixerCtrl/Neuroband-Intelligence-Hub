@@ -73,6 +73,8 @@ let taskCommentsUnavailable = false;
 let currentTaskView = "mine";
 let currentUser = null;
 let currentActivity = [];
+let calendarCurrentDate = new Date();
+let myWorkFilter = "all";
 
 function safeId(id){
   const el = document.getElementById(id);
@@ -104,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMembers();
   loadTasks();
   loadActivity();
+  wireMyWorkDashboard();
   initRealtime();
   setInterval(updateMyPresence, 120000);
 });
@@ -1245,6 +1248,131 @@ function wireTaskViews(){
   });
 }
 
+function wireMyWorkDashboard(){
+  // Calendar navigation
+  const prevBtn = document.getElementById("calendar-prev-month");
+  const nextBtn = document.getElementById("calendar-next-month");
+  const filterBtn = document.getElementById("my-work-filter");
+  
+  if (prevBtn) prevBtn.addEventListener("click", () => {
+    calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() - 1);
+    renderMyWork();
+  });
+  
+  if (nextBtn) nextBtn.addEventListener("click", () => {
+    calendarCurrentDate.setMonth(calendarCurrentDate.getMonth() + 1);
+    renderMyWork();
+  });
+  
+  if (filterBtn) filterBtn.addEventListener("change", (e) => {
+    myWorkFilter = e.target.value;
+    renderMyWork();
+  });
+}
+
+function renderCalendar(){
+  const calendarEl = document.getElementById("my-work-calendar");
+  const monthYearEl = document.getElementById("calendar-month-year");
+  if (!calendarEl || !monthYearEl) return;
+  
+  const mine = myMemberProfile();
+  if (!mine) return;
+  
+  const year = calendarCurrentDate.getFullYear();
+  const month = calendarCurrentDate.getMonth();
+  
+  // Set month/year display
+  const monthNames = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  monthYearEl.textContent = `${monthNames[month]} ${year}`;
+  
+  // Get all tasks for this person for this month
+  const assignedTasks = currentTasks.filter(task => task.assigned_to === mine.id);
+  const tasksByDate = {};
+  assignedTasks.forEach(task => {
+    if (task.due_date) {
+      const taskDate = new Date(task.due_date);
+      if (taskDate.getMonth() === month && taskDate.getFullYear() === year) {
+        const day = taskDate.getDate();
+        if (!tasksByDate[day]) tasksByDate[day] = [];
+        tasksByDate[day].push(task);
+      }
+    }
+  });
+  
+  // Build calendar
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+  const today = new Date();
+  
+  let html = '';
+  
+  // Day headers
+  const dayHeaders = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  dayHeaders.forEach(day => {
+    html += `<div class="calendar-day-header">${day}</div>`;
+  });
+  
+  // Previous month days
+  for (let i = firstDay - 1; i >= 0; i--) {
+    const day = daysInPrevMonth - i;
+    html += `<div class="calendar-day other-month"><div class="calendar-day-number">${day}</div></div>`;
+  }
+  
+  // Current month days
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const isToday = today.toDateString() === date.toDateString();
+    const hasTasks = tasksByDate[day];
+    const dayTasks = hasTasks ? hasTasks.filter(t => t.status !== "Done") : [];
+    const overdueTasks = dayTasks.filter(t => today > date && t.status !== "Done").length;
+    
+    let classes = "calendar-day";
+    if (isToday) classes += " today";
+    if (dayTasks.length > 0) classes += " has-tasks";
+    
+    html += `<div class="${classes}" data-calendar-day="${day}" data-calendar-tasks="${dayTasks.length}" data-calendar-month="${month}" data-calendar-year="${year}">
+      <div class="calendar-day-number">${day}</div>
+      ${dayTasks.length > 0 ? `<div class="calendar-day-indicator">${dayTasks.length}</div>` : ""}
+    </div>`;
+  }
+  
+  // Next month days
+  const totalCells = 42;
+  const cellsFilled = firstDay + daysInMonth;
+  const nextMonthDays = totalCells - cellsFilled;
+  for (let day = 1; day <= nextMonthDays; day++) {
+    html += `<div class="calendar-day other-month"><div class="calendar-day-number">${day}</div></div>`;
+  }
+  
+  calendarEl.innerHTML = html;
+  
+  // Add click handlers to calendar days
+  calendarEl.querySelectorAll("[data-calendar-day]").forEach(dayEl => {
+    dayEl.addEventListener("click", () => {
+      const day = parseInt(dayEl.dataset.calendarDay);
+      const clickedDate = new Date(year, month, day);
+      
+      // Scroll to tasks for that date
+      const tasksInDay = assignedTasks.filter(task => {
+        if (!task.due_date) return false;
+        const taskDate = new Date(task.due_date);
+        return taskDate.toDateString() === clickedDate.toDateString();
+      });
+      
+      if (tasksInDay.length > 0) {
+        const taskList = document.getElementById("my-work-list");
+        const firstTask = tasksInDay[0];
+        const taskItem = taskList.querySelector(`[data-focus-task-id="${firstTask.id}"]`);
+        if (taskItem) {
+          taskItem.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }
+    });
+  });
+}
+
 function renderMyWork(){
   const list = document.getElementById("my-work-list");
   const counts = document.getElementById("my-work-counts");
@@ -1256,25 +1384,53 @@ function renderMyWork(){
     counts.innerHTML = `<span class="work-count">Sign in to see your tasks</span>`;
     list.innerHTML = `<div class="my-work-signin">Your personal task dashboard will appear here once you sign in and claim your team profile.</div>`;
     empty.classList.add("is-hidden");
+    renderCalendar();
     return;
   }
 
   const seenAt = new Date(localStorage.getItem(notificationSeenStorageKey()) || 0).getTime();
   const assignedTasks = currentTasks.filter(task => task.assigned_to === mine.id);
   const openTasks = assignedTasks.filter(task => task.status !== "Done");
+  const completedTasks = assignedTasks.filter(task => task.status === "Done");
+  
+  const today = new Date();
+  const todayStr = today.toDateString();
+  
   const dueSoon = openTasks.filter(task => {
     if (!task.due_date) return false;
     const days = (new Date(`${task.due_date}T00:00:00`) - new Date(new Date().toDateString())) / 86400000;
     return days >= 0 && days <= 7;
   }).length;
+  
+  const overdue = openTasks.filter(task => {
+    if (!task.due_date) return false;
+    return new Date(`${task.due_date}T00:00:00`) < new Date(new Date().toDateString());
+  }).length;
+  
   const needsAttention = openTasks.filter(task => new Date(task.created_at).getTime() > seenAt || taskHasNewComment(task, seenAt)).length;
+  
   counts.innerHTML = `
     <span class="work-count"><strong>${openTasks.length}</strong> open</span>
     <span class="work-count"><strong>${dueSoon}</strong> due soon</span>
+    <span class="work-count"><strong>${completedTasks.length}</strong> completed</span>
+    ${overdue > 0 ? `<span class="work-count work-count-alert"><strong>${overdue}</strong> overdue</span>` : ""}
     ${needsAttention ? `<span class="work-count work-count-alert"><strong>${needsAttention}</strong> new</span>` : ""}
   `;
-  empty.classList.toggle("is-hidden", openTasks.length !== 0);
-  list.innerHTML = openTasks.length ? [...openTasks].sort((a, b) => {
+  
+  // Filter tasks based on myWorkFilter
+  let filteredTasks = openTasks;
+  if (myWorkFilter === "open") filteredTasks = openTasks;
+  else if (myWorkFilter === "overdue") filteredTasks = openTasks.filter(t => t.due_date && new Date(`${t.due_date}T00:00:00`) < new Date(new Date().toDateString()));
+  else if (myWorkFilter === "due-soon") filteredTasks = dueSoon > 0 ? openTasks.filter(task => {
+    if (!task.due_date) return false;
+    const days = (new Date(`${task.due_date}T00:00:00`) - new Date(new Date().toDateString())) / 86400000;
+    return days >= 0 && days <= 7;
+  }) : [];
+  else if (myWorkFilter === "done") filteredTasks = completedTasks;
+  
+  empty.classList.toggle("is-hidden", filteredTasks.length !== 0);
+  list.innerHTML = filteredTasks.length ? [...filteredTasks].sort((a, b) => {
+    if (!a.due_date && !b.due_date) return new Date(b.created_at) - new Date(a.created_at);
     if (!a.due_date) return 1;
     if (!b.due_date) return -1;
     return a.due_date.localeCompare(b.due_date);
@@ -1304,6 +1460,9 @@ function renderMyWork(){
       setTimeout(() => taskCard?.classList.remove("is-focused"), 1400);
     });
   });
+  
+  // Render the calendar
+  renderCalendar();
 }
 
 function renderTasks(){

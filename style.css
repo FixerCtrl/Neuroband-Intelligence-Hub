@@ -542,3 +542,286 @@ body::before{
   .modal-actions{ flex-direction:column-reverse; }
   .modal-actions .btn{ width:100%; }
 }
+
+/* ---------- MY WORK DASHBOARD ---------- */
+.my-work-summary{
+  display:flex;
+  gap:16px;
+  margin-bottom:28px;
+  flex-wrap:wrap;
+}
+
+.work-count{
+  padding:12px 14px;
+  background:var(--surface);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-m);
+  font-size:12px;
+  flex:1 1 140px;
+}
+
+.work-count strong{
+  font-size:18px;
+  display:block;
+  margin-bottom:3px;
+}
+
+.work-count-alert{
+  background:var(--accent-dim);
+  border-color:var(--accent);
+  color:var(--accent-ink);
+}
+
+.my-work-layout{
+  display:grid;
+  grid-template-columns:1fr 2fr;
+  gap:28px;
+  margin-bottom:20px;
+}
+
+/* Calendar Section */
+.my-work-calendar-section{
+  background:var(--surface);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-m);
+  padding:18px;
+  box-shadow: 0 8px 18px rgba(52, 47, 40, 0.04);
+}
+
+.my-work-calendar-controls{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:16px;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--border-soft);
+}
+
+.my-work-calendar-controls h2{
+  margin:0;
+  font:700 16px var(--font-sans);
+  flex:1;
+  text-align:center;
+}
+
+.my-work-calendar{
+  display:grid;
+  grid-template-columns:repeat(7, 1fr);
+  gap:2px;
+}
+
+.calendar-day-header{
+  padding:8px 4px;
+  font-size:11px;
+  font-weight:700;
+  text-align:center;
+  color:var(--text-muted);
+  text-transform:uppercase;
+}
+
+.calendar-day{
+  aspect-ratio:1;
+  padding:4px;
+  border:1px solid var(--border-soft);
+  border-radius:4px;
+  font-size:12px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  position:relative;
+  background:var(--surface);
+  transition:background 0.15s ease, border-color 0.15s ease;
+}
+
+.calendar-day.other-month{
+  opacity:0.35;
+  cursor:default;
+}
+
+.calendar-day.has-tasks{
+  background:var(--accent-dim);
+  border-color:var(--accent);
+  font-weight:700;
+}
+
+.calendar-day.today{
+  background:var(--success-dim);
+  border-color:var(--success);
+}
+
+.calendar-day.selected{
+  background:var(--accent);
+  color:var(--accent-ink);
+  border-color:var(--accent);
+}
+
+.calendar-day-number{
+  font-size:11px;
+  font-weight:500;
+}
+
+.calendar-day-indicator{
+  position:absolute;
+  bottom:2px;
+  font-size:8px;
+  color:var(--accent-ink);
+}
+
+/* Tasks Section */
+.my-work-tasks-section{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.my-work-section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:8px;
+}
+
+.my-work-section-head h2{
+  margin:0;
+  font-size:16px;
+  font-weight:700;
+}
+
+.my-work-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:600px;
+  overflow-y:auto;
+}
+
+.my-work-item{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  background:var(--surface);
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-m);
+  cursor:pointer;
+  transition:border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.my-work-item:hover{
+  border-color:var(--accent);
+  transform:translateX(2px);
+}
+
+.my-work-item.is-attention{
+  border-left:3px solid var(--accent);
+  padding-left:12px;
+  background:var(--accent-dim);
+}
+
+.my-work-item-main{
+  flex:1;
+  min-width:0;
+}
+
+.my-work-item-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:6px;
+}
+
+.my-work-item-title strong{
+  font-size:13px;
+  font-weight:700;
+}
+
+.my-work-item-meta{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size:11px;
+}
+
+.work-badge{
+  display:inline-block;
+  font-size:10px;
+  font-weight:700;
+  padding:2px 6px;
+  border-radius:3px;
+  background:var(--accent-dim);
+  color:var(--accent-ink);
+}
+
+.work-badge-new{
+  background:var(--success-dim);
+  color:var(--success);
+}
+
+.work-badge-message{
+  background:var(--accent-dim);
+  color:var(--accent-ink);
+}
+
+.task-status-text{
+  font-weight:500;
+  font-size:10px;
+  text-transform:uppercase;
+  padding:2px 6px;
+  border-radius:3px;
+  background:var(--border-soft);
+  color:var(--text-muted);
+}
+
+.task-status-text.done{
+  background:var(--success-dim);
+  color:var(--success);
+}
+
+.task-status-text.in-progress{
+  background:var(--accent-dim);
+  color:var(--accent-ink);
+}
+
+.my-work-due{
+  color:var(--text-faint);
+  font-weight:500;
+  white-space:nowrap;
+}
+
+.my-work-due.is-overdue{
+  color:var(--danger);
+  font-weight:700;
+}
+
+@media (max-width: 1024px){
+  .my-work-layout{
+    grid-template-columns:1fr;
+    gap:20px;
+  }
+}
+
+@media (max-width: 640px){
+  .my-work-layout{
+    grid-template-columns:1fr;
+  }
+  
+  .my-work-summary{
+    gap:8px;
+  }
+  
+  .work-count{
+    flex:1 1 100px;
+    padding:10px 12px;
+    font-size:11px;
+  }
+  
+  .work-count strong{
+    font-size:16px;
+  }
+}
