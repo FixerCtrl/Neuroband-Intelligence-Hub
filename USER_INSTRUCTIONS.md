@@ -36,7 +36,7 @@ The app is organized into six main sections:
 | **Analysis** | Live statistics on data collection progress (coverage by KIN, source mix, question coverage) |
 | **Collection Plan** | Editable document where you outline your data collection strategy |
 | **Repository** | Central database storing all collected sources with metadata |
-| **Team** | Assign tasks, track team member workload, and collaborate |
+| **Team** | Team directory, collaboration, and your personal dashboard (My Work) — visible only when logged in |
 | **Activity** | Audit trail showing all changes and submissions |
 | **Manual** | System documentation (auto-populated with defaults) |
 
@@ -279,15 +279,24 @@ The **Team tab** helps divide work and track progress.
 ## My Work Dashboard
 
 ### Why This Matters
-The **My Work dashboard** is your personal task management center. It helps you track your assignments, manage deadlines, and stay on top of your team's workflow without needing to navigate through multiple sections.
+The **Personal Dashboard: My Work** is your personal task management center within the Team tab. It helps you track your assignments, manage deadlines, and stay on top of your team's workflow without needing to navigate to a separate section. **It's visible only to you when you're logged in.**
 
 ### Accessing Your Dashboard
 
-1. Click the **My Work** tab in the left sidebar (visible after you sign in and claim your team profile).
-2. Once you've claimed your profile, you'll see:
+1. Click the **Team** tab in the left sidebar.
+2. Once you sign in and claim your team profile, you'll see a **"Personal Dashboard: My Work"** section at the top of the Team tab.
+3. This section displays:
    - **Summary cards** showing your task statistics
    - **Interactive calendar** for the current month with visual due date indicators
    - **Task list** with filtering and sorting options
+
+**Note:** The personal dashboard is only visible to you after you've signed in and claimed your profile. Anonymous users won't see this section.
+
+#### Platform & Theme Compatibility
+✓ **Desktop & Tablet:** Full interactive calendar, side-by-side layout (calendar on left, tasks on right)  
+✓ **Mobile:** Responsive single-column layout with full functionality  
+✓ **Light Mode:** Clean, readable layout with clear contrast  
+✓ **Dark Mode:** Fully supported with adjusted colors for comfortable viewing
 
 ### Summary Cards: At a Glance
 

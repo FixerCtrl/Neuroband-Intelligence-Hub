@@ -896,7 +896,13 @@ function renderMembers(){
 
 function renderYourProfile(){
   const slot = document.getElementById("your-profile-slot");
+  const personalDashboard = document.getElementById("personal-dashboard");
   if (!slot) return;
+
+  // Show/hide personal dashboard based on login status
+  if (personalDashboard) {
+    personalDashboard.classList.toggle("is-hidden", !currentUser);
+  }
 
   if (!currentUser) {
     slot.innerHTML = `
@@ -934,29 +940,16 @@ function renderYourProfile(){
 
   const avatarUrl = getPublicAvatarUrl(mine.avatar_path);
   slot.innerHTML = `
-    <div class="profile-workspace">
-      <div class="your-profile-card">
-        <div class="your-profile-avatar" id="your-profile-avatar-click" title="Click to change photo">
-          ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(mine.name)}" />` : initials(mine.name)}
-        </div>
-        <div class="your-profile-text">
-          <div class="your-profile-kicker">Signed in as${admin ? " · ADMIN" : ""}</div>
-          <div class="your-profile-name">${escapeHtml(mine.name)}</div>
-          ${mine.bio ? `<div class="your-profile-bio">${escapeHtml(mine.bio)}</div>` : `<div class="your-profile-bio">${escapeHtml(currentUser.email)}</div>`}
-        </div>
-        <button class="btn btn-ghost" id="your-profile-edit-btn">Edit profile</button>
+    <div class="your-profile-card">
+      <div class="your-profile-avatar" id="your-profile-avatar-click" title="Click to change photo">
+        ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(mine.name)}" />` : initials(mine.name)}
       </div>
-      <section class="my-work" aria-labelledby="my-work-title">
-        <div class="my-work-head">
-          <div>
-            <p class="eyebrow">Personal dashboard</p>
-            <h2 id="my-work-title">My work</h2>
-          </div>
-          <div class="my-work-counts" id="my-work-counts"></div>
-        </div>
-        <div class="my-work-list" id="my-work-list"></div>
-        <p class="empty-state is-hidden" id="my-work-empty">You have no open tasks right now.</p>
-      </section>
+      <div class="your-profile-text">
+        <div class="your-profile-kicker">Signed in as${admin ? " · ADMIN" : ""}</div>
+        <div class="your-profile-name">${escapeHtml(mine.name)}</div>
+        ${mine.bio ? `<div class="your-profile-bio">${escapeHtml(mine.bio)}</div>` : `<div class="your-profile-bio">${escapeHtml(currentUser.email)}</div>`}
+      </div>
+      <button class="btn btn-ghost" id="your-profile-edit-btn">Edit profile</button>
     </div>
   `;
   document.getElementById("your-profile-edit-btn").addEventListener("click", openOwnProfileEditor);
@@ -1377,14 +1370,19 @@ function renderMyWork(){
   const list = document.getElementById("my-work-list");
   const counts = document.getElementById("my-work-counts");
   const empty = document.getElementById("my-work-empty");
-  if (!list || !counts || !empty) return;
+  const personalDashboard = document.getElementById("personal-dashboard");
+  
+  if (!list || !counts || !empty || !personalDashboard) return;
 
   const mine = myMemberProfile();
+  
+  // Show/hide dashboard based on login status
+  personalDashboard.classList.toggle("is-hidden", !currentUser || !mine);
+  
   if (!currentUser || !mine) {
     counts.innerHTML = `<span class="work-count">Sign in to see your tasks</span>`;
-    list.innerHTML = `<div class="my-work-signin">Your personal task dashboard will appear here once you sign in and claim your team profile.</div>`;
+    list.innerHTML = `<div class="my-work-signin">Sign in and claim your team profile to see your personal dashboard here.</div>`;
     empty.classList.add("is-hidden");
-    renderCalendar();
     return;
   }
 

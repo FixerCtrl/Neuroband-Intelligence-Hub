@@ -543,6 +543,26 @@ body::before{
   .modal-actions .btn{ width:100%; }
 }
 
+/* ---------- PERSONAL DASHBOARD (inside Team tab) ---------- */
+.personal-dashboard{
+  margin-bottom:28px;
+  padding:20px;
+  border:1px solid var(--border-soft);
+  border-radius:var(--radius-m);
+  background:var(--surface-raised);
+  box-shadow: 0 8px 18px rgba(52, 47, 40, 0.04);
+}
+
+.personal-dashboard.is-hidden{
+  display:none;
+}
+
+.personal-dashboard .section-subhead{
+  margin-bottom:16px;
+  padding-bottom:12px;
+  border-bottom:1px solid var(--border-soft);
+}
+
 /* ---------- MY WORK DASHBOARD ---------- */
 .my-work-summary{
   display:flex;
