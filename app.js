@@ -589,10 +589,10 @@ function populateFormDropdowns(){
   KINS.forEach(kin => {
     kinSelect.appendChild(new Option(`${kin.id} — ${kin.label}`, kin.id));
     const filterOption = new Option(`${kin.id} — ${kin.label}`, kin.id);
+    filterOption.dataset.filterId = kin.id;
     filterOption.dataset.filterLabel = kin.filterLabel || kin.label;
     filterKin.appendChild(filterOption);
   });
-  wireKinFilterDropdown(filterKin);
   updateKiqOptions(document.getElementById("f-kin").value, document.getElementById("f-kiq"));
   document.getElementById("f-kin").addEventListener("change", e => updateKiqOptions(e.target.value, document.getElementById("f-kiq")));
 
@@ -610,36 +610,40 @@ function populateFormDropdowns(){
     filterType.appendChild(new Option(t, t));
   });
 
+  wireFilterDropdown(filterKin, "filter-kin");
+  wireFilterDropdown(filterKiq, "filter-kiq");
+  wireFilterDropdown(filterType, "filter-type");
+
   document.getElementById("f-file").addEventListener("change", updateFilenamePreview);
   ["f-kin","f-kiq","f-type","f-source","f-date-pub"].forEach(id => {
     document.getElementById(id).addEventListener("change", updateFilenamePreview);
   });
 }
 
-function wireKinFilterDropdown(filterKin){
-  const control = document.getElementById("filter-kin-control");
-  const trigger = document.getElementById("filter-kin-trigger");
-  const current = document.getElementById("filter-kin-current");
-  const menu = document.getElementById("filter-kin-menu");
+function wireFilterDropdown(select, idPrefix){
+  const control = document.getElementById(`${idPrefix}-control`);
+  const trigger = document.getElementById(`${idPrefix}-trigger`);
+  const current = document.getElementById(`${idPrefix}-current`);
+  const menu = document.getElementById(`${idPrefix}-menu`);
   if (!control || !trigger || !current || !menu) return;
 
-  menu.innerHTML = [...filterKin.options].map(option => {
-    const kin = KINS.find(item => item.id === option.value);
-    const label = kin ? kin.filterLabel || kin.label : "";
+  menu.innerHTML = [...select.options].map(option => {
+    const filterId = option.dataset.filterId;
+    const label = option.dataset.filterLabel;
     return `
-      <button type="button" class="filter-kin-option" role="option" aria-selected="${option.value === filterKin.value}" tabindex="-1" data-value="${escapeHtml(option.value)}">
-        ${kin ? `<strong>${escapeHtml(kin.id)}</strong><span>${escapeHtml(label)}</span>` : `<span>All KINs</span>`}
+      <button type="button" class="filter-dropdown-option" role="option" aria-selected="${option.value === select.value}" tabindex="-1" data-value="${escapeHtml(option.value)}">
+        ${filterId ? `<strong>${escapeHtml(filterId)}</strong><span>${escapeHtml(label)}</span>` : `<span>${escapeHtml(option.textContent)}</span>`}
       </button>
     `;
   }).join("");
 
   function updateCurrent(){
-    const kin = KINS.find(item => item.id === filterKin.value);
-    current.innerHTML = kin
-      ? `<strong>${escapeHtml(kin.id)}</strong><span>${escapeHtml(kin.filterLabel || kin.label)}</span>`
-      : "All KINs";
+    const option = select.options[select.selectedIndex];
+    current.innerHTML = option.dataset.filterId
+      ? `<strong>${escapeHtml(option.dataset.filterId)}</strong><span>${escapeHtml(option.dataset.filterLabel)}</span>`
+      : escapeHtml(option.textContent);
     menu.querySelectorAll("[role=option]").forEach(option => {
-      option.setAttribute("aria-selected", String(option.dataset.value === filterKin.value));
+      option.setAttribute("aria-selected", String(option.dataset.value === select.value));
     });
   }
 
@@ -662,9 +666,9 @@ function wireKinFilterDropdown(filterKin){
   menu.addEventListener("click", event => {
     const option = event.target.closest("[role=option]");
     if (!option) return;
-    filterKin.value = option.dataset.value;
+    select.value = option.dataset.value;
     updateCurrent();
-    filterKin.dispatchEvent(new Event("change", { bubbles: true }));
+    select.dispatchEvent(new Event("change", { bubbles: true }));
     setMenuOpen(false);
     trigger.focus();
   });
