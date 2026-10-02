@@ -138,7 +138,14 @@
           <svg class="filter-search-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="10.8" cy="10.8" r="6.3" /><path d="m15.5 15.5 4.2 4.2" /></svg>
           <input type="search" id="filter-search" placeholder="Search source, author, notes…" />
         </div>
-        <select id="filter-kin"><option value="">All KINs</option></select>
+        <div class="filter-kin-control" id="filter-kin-control">
+          <button type="button" class="filter-kin-trigger" id="filter-kin-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="filter-kin-menu">
+            <span class="filter-kin-value" id="filter-kin-current">All KINs</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m7 10 5 5 5-5" /></svg>
+          </button>
+          <div class="filter-kin-menu is-hidden" id="filter-kin-menu" role="listbox" aria-label="Filter by KIN"></div>
+          <select id="filter-kin" class="is-hidden" aria-hidden="true" tabindex="-1"><option value="">All KINs</option></select>
+        </div>
         <select id="filter-kiq"><option value="">All KIQs</option></select>
         <select id="filter-type"><option value="">All source types</option></select>
       </div>

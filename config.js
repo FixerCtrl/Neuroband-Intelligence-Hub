@@ -25,6 +25,7 @@ const KINS = [
   {
     id: "KIN1",
     label: "Understand the legal, medical, and technological classification to be compliant with market entry requirements",
+    filterLabel: "Legal, medical, and technological market-entry requirements",
     kiqs: [
       { id: "KIQ1", label: "Upon entering the market, can the product be classified as a medical or technological device?" },
       { id: "KIQ2", label: "What are the legal and regulatory requirements to enter the technological and/or the medical market?" },
@@ -34,6 +35,7 @@ const KINS = [
   {
     id: "KIN2",
     label: "Position Neuroband ahead of its competitors, by ensuring that it has a stronger market position, effective distribution strategies, and opportunities to compete advantageously",
+    filterLabel: "Competitor positioning, distribution, and market opportunities",
     kiqs: [
       { id: "KIQ1", label: "What features, pricing, and technologies do competitors offer?" },
       { id: "KIQ2", label: "What marketing and distribution strategies do competitors use to reach customers?" },
@@ -43,6 +45,7 @@ const KINS = [
   {
     id: "KIN3",
     label: "Understand different population groups and which demographics are more likely to engage with the product across age, sex, and social class",
+    filterLabel: "Demographics, launch readiness, and purchasing decisions",
     kiqs: [
       { id: "KIQ1", label: "What is the target market demographic? Are we appealing to the middle class or upper demographic?" },
       { id: "KIQ2", label: "How will different demographics perceive the product, and will they be ready for the product to be launched?" },

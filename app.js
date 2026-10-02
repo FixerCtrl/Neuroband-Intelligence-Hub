@@ -588,8 +588,11 @@ function populateFormDropdowns(){
   const filterKin = document.getElementById("filter-kin");
   KINS.forEach(kin => {
     kinSelect.appendChild(new Option(`${kin.id} — ${kin.label}`, kin.id));
-    filterKin.appendChild(new Option(`${kin.id} — ${kin.label}`, kin.id));
+    const filterOption = new Option(`${kin.id} — ${kin.label}`, kin.id);
+    filterOption.dataset.filterLabel = kin.filterLabel || kin.label;
+    filterKin.appendChild(filterOption);
   });
+  wireKinFilterDropdown(filterKin);
   updateKiqOptions(document.getElementById("f-kin").value, document.getElementById("f-kiq"));
   document.getElementById("f-kin").addEventListener("change", e => updateKiqOptions(e.target.value, document.getElementById("f-kiq")));
 
@@ -610,6 +613,80 @@ function populateFormDropdowns(){
   document.getElementById("f-file").addEventListener("change", updateFilenamePreview);
   ["f-kin","f-kiq","f-type","f-source","f-date-pub"].forEach(id => {
     document.getElementById(id).addEventListener("change", updateFilenamePreview);
+  });
+}
+
+function wireKinFilterDropdown(filterKin){
+  const control = document.getElementById("filter-kin-control");
+  const trigger = document.getElementById("filter-kin-trigger");
+  const current = document.getElementById("filter-kin-current");
+  const menu = document.getElementById("filter-kin-menu");
+  if (!control || !trigger || !current || !menu) return;
+
+  menu.innerHTML = [...filterKin.options].map(option => {
+    const kin = KINS.find(item => item.id === option.value);
+    const label = kin ? kin.filterLabel || kin.label : "";
+    return `
+      <button type="button" class="filter-kin-option" role="option" aria-selected="${option.value === filterKin.value}" tabindex="-1" data-value="${escapeHtml(option.value)}">
+        ${kin ? `<strong>${escapeHtml(kin.id)}</strong><span>${escapeHtml(label)}</span>` : `<span>All KINs</span>`}
+      </button>
+    `;
+  }).join("");
+
+  function updateCurrent(){
+    const kin = KINS.find(item => item.id === filterKin.value);
+    current.innerHTML = kin
+      ? `<strong>${escapeHtml(kin.id)}</strong><span>${escapeHtml(kin.filterLabel || kin.label)}</span>`
+      : "All KINs";
+    menu.querySelectorAll("[role=option]").forEach(option => {
+      option.setAttribute("aria-selected", String(option.dataset.value === filterKin.value));
+    });
+  }
+
+  function setMenuOpen(open, focusSelected = false){
+    menu.classList.toggle("is-hidden", !open);
+    trigger.setAttribute("aria-expanded", String(open));
+    if (open && focusSelected) {
+      const selected = menu.querySelector('[aria-selected="true"]') || menu.querySelector("[role=option]");
+      if (selected) selected.focus();
+    }
+  }
+
+  trigger.addEventListener("click", () => setMenuOpen(menu.classList.contains("is-hidden"), true));
+  trigger.addEventListener("keydown", event => {
+    if (["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+      setMenuOpen(true, true);
+    }
+  });
+  menu.addEventListener("click", event => {
+    const option = event.target.closest("[role=option]");
+    if (!option) return;
+    filterKin.value = option.dataset.value;
+    updateCurrent();
+    filterKin.dispatchEvent(new Event("change", { bubbles: true }));
+    setMenuOpen(false);
+    trigger.focus();
+  });
+  menu.addEventListener("keydown", event => {
+    const options = [...menu.querySelectorAll("[role=option]")];
+    const index = options.indexOf(document.activeElement);
+    let nextIndex = index;
+    if (event.key === "ArrowDown") nextIndex = Math.min(index + 1, options.length - 1);
+    else if (event.key === "ArrowUp") nextIndex = Math.max(index - 1, 0);
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = options.length - 1;
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      setMenuOpen(false);
+      trigger.focus();
+      return;
+    } else return;
+    event.preventDefault();
+    options[nextIndex].focus();
+  });
+  document.addEventListener("click", event => {
+    if (!control.contains(event.target)) setMenuOpen(false);
   });
 }
 
