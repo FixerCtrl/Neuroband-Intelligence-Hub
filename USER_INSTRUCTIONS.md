@@ -173,9 +173,9 @@ Databases / platforms:
 **5. RESPONSIBILITIES (Recommended)**
 Assign each team member ownership of one or more KINs:
 ```
-Alice — KIN1 (Competitor product strategy) sources
-Bob — KIN2 (Market sentiment) sources
-Carol — KIN3 (Regulatory environment) sources
+Alice — KIN1 (Legal, medical, and technological market-entry requirements) sources
+Bob — KIN2 (Competitor positioning and distribution) sources
+Carol — KIN3 (Population demographics and purchasing decisions) sources
 ```
 
 ### Updating Your Plan
@@ -220,16 +220,16 @@ The **Repository tab** is your central database. Each entry represents one sourc
 
 ### Example Entry Workflow
 
-**You find:** A Bloomberg article about Whoop Inc. launching a new wearable with EEG capability.
+**You find:** A Bloomberg article comparing competitor wearable features, pricing, and technology.
 
-1. **KIN:** KIN1 (Competitor product strategy)
-2. **KIQ:** KIQ1 (What features are competitors prioritising?)
+1. **KIN:** KIN2 (Competitor positioning and distribution)
+2. **KIQ:** KIQ1 (What features, pricing, and technologies do competitors offer?)
 3. **Source:** Bloomberg
-4. **Author:** Whoop Inc. / Bloomberg Technology team
+4. **Author:** Bloomberg Technology team
 5. **Date Published:** 2024-08-15
 6. **Date Collected:** 2024-09-01
 7. **Type of Source:** News article
-8. **Relevance:** "Whoop's new EEG wearable targets wellness market; positioning against Neuroband's health focus. Key feature: real-time sleep staging."
+8. **Relevance:** "Compares competitor wearable features, pricing, and technology to inform Neuroband's competitive positioning."
 9. **Upload:** PDF of the article.
 10. **Save** → Entry is now in your repository.
 
@@ -270,9 +270,9 @@ The **Team tab** helps divide work and track progress.
 - Add comments to tasks for team discussion (e.g., "Can't find sources on this topic — suggest we pivot to competitor reviews").
 
 ### Division of Labour Example
-- **Alice:** "Collect all KIN1 sources (competitor product strategy)"
-- **Bob:** "Collect all KIN2 sources (market and consumer sentiment)"
-- **Carol:** "Collect all KIN3 sources (regulatory environment)"
+- **Alice:** "Collect all KIN1 sources (legal, medical, and technological market-entry requirements)"
+- **Bob:** "Collect all KIN2 sources (competitor positioning and distribution)"
+- **Carol:** "Collect all KIN3 sources (population demographics and purchasing decisions)"
 
 ---
 
@@ -436,7 +436,7 @@ The **Analysis** section shows live statistics:
    - Select a **KIN** to see only sources for that intelligence need.
    - Select a **KIQ** to see only sources addressing that question.
    - Select a **Source Type** to see only (e.g.) journal articles.
-4. **Combine filters:** E.g., "KIN2 + News article" to see all news sources relevant to market sentiment.
+4. **Combine filters:** E.g., "KIN2 + News article" to see news sources about competitor offerings and strategies.
 
 ### Downloading & Exporting Data
 

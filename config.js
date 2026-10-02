@@ -15,7 +15,7 @@ const SUPABASE_URL = "https://pqrwxsuumxrteehtkrnt.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e7p5QOSrfHaPDH75YBE8xw_KGAakeGw";
 
 // Your group's Key Intelligence Topic
-const KIT = "How should Neuroband position its next wearable device against established competitors over the next 18 months?";
+const KIT = "Evaluating the market entry requirements";
 
 // Your group's Key Intelligence Needs, each broken into
 // Key Intelligence Questions. Replace with your real Practical 1
@@ -24,25 +24,29 @@ const KIT = "How should Neuroband position its next wearable device against esta
 const KINS = [
   {
     id: "KIN1",
-    label: "Competitor product strategy",
+    label: "Understand the legal, medical, and technological classification to be compliant with market entry requirements",
     kiqs: [
-      { id: "KIQ1", label: "What features are competitors prioritising in their next product cycle?" },
-      { id: "KIQ2", label: "How are competitors pricing comparable devices?" },
+      { id: "KIQ1", label: "Upon entering the market, can the product be classified as a medical or technological device?" },
+      { id: "KIQ2", label: "What are the legal and regulatory requirements to enter the technological and/or the medical market?" },
+      { id: "KIQ3", label: "In terms of POPIA, how does Neuroband ensure that clients' information stays confidential and does not face the risk of being used for malicious reasons?" },
     ],
   },
   {
     id: "KIN2",
-    label: "Market and consumer sentiment",
+    label: "Position Neuroband ahead of its competitors, by ensuring that it has a stronger market position, effective distribution strategies, and opportunities to compete advantageously",
     kiqs: [
-      { id: "KIQ1", label: "How do consumers perceive Neuroband relative to competitors?" },
-      { id: "KIQ2", label: "What unmet needs are consumers expressing in reviews and forums?" },
+      { id: "KIQ1", label: "What features, pricing, and technologies do competitors offer?" },
+      { id: "KIQ2", label: "What marketing and distribution strategies do competitors use to reach customers?" },
+      { id: "KIQ3", label: "What opportunities or gaps in the market can Neuroband exploit that competitors are not addressing?" },
     ],
   },
   {
     id: "KIN3",
-    label: "Regulatory and industry environment",
+    label: "Understand different population groups and which demographics are more likely to engage with the product across age, sex, and social class",
     kiqs: [
-      { id: "KIQ1", label: "What regulatory changes could affect wearable neurotech in target markets?" },
+      { id: "KIQ1", label: "What is the target market demographic? Are we appealing to the middle class or upper demographic?" },
+      { id: "KIQ2", label: "How will different demographics perceive the product, and will they be ready for the product to be launched?" },
+      { id: "KIQ3", label: "What factors influence customer purchasing decisions?" },
     ],
   },
 ];
