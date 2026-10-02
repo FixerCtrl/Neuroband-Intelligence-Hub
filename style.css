@@ -251,13 +251,15 @@ body::before{
 .repository-add-btn:hover{ background:var(--accent-dim); color:var(--accent-ink); border-color:var(--accent-ink); opacity:1; }
 
 /* ---------- REPOSITORY ---------- */
-.filter-bar{ display:flex; gap:10px; margin-bottom:26px; padding:16px; flex-wrap:wrap; border:1px solid var(--border-soft); border-radius:var(--radius-m); background:var(--surface); box-shadow:0 7px 18px rgba(56, 53, 48, 0.06); }
+.filter-bar{ display:flex; gap:10px; margin-bottom:26px; padding:0; flex-wrap:wrap; }
 .filter-bar input, .filter-bar select{
   background: var(--surface-raised); border:1px solid var(--border); color: var(--text);
   padding: 10px 12px; border-radius: var(--radius-s); font-size: 13.5px; line-height:1.4;
 }
-.filter-bar input{ flex:1 1 220px; }
-.filter-bar select{ flex: 0 1 160px; }
+.filter-search-wrap{ position:relative; flex:2 1 0; min-width:0; }
+.filter-search-wrap input{ width:100%; padding-left:38px; }
+.filter-search-icon{ position:absolute; top:50%; left:12px; width:17px; height:17px; transform:translateY(-50%); fill:none; stroke:var(--text-faint); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+.filter-bar select{ flex:1 1 0; min-width:0; }
 
 .card-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:14px; }
 
@@ -514,7 +516,8 @@ body::before{
   .kit-statement{ font-size:22px; }
   .kin-grid, .card-grid, .member-grid{ grid-template-columns:1fr; gap:12px; }
   .filter-bar{ gap:8px; margin-bottom:18px; }
-  .filter-bar input, .filter-bar select{ width:100%; flex:1 1 100%; }
+  .filter-bar .filter-search-wrap, .filter-bar select{ width:100%; flex:1 1 100%; }
+  .filter-bar input{ width:100%; }
   .your-profile-card{ align-items:flex-start; flex-wrap:wrap; padding:16px; }
   .your-profile-text{ flex-basis:calc(100% - 74px); }
   .your-profile-card .btn{ width:100%; margin-top:2px; }
