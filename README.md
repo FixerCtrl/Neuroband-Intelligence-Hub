@@ -29,6 +29,7 @@ The app provides:
 ### 1. Read the Guides
 - **[USER_INSTRUCTIONS.md](USER_INSTRUCTIONS.md)** — Complete guide for how to use every feature
 - **[QUICK_START.md](QUICK_START.md)** — One-page printable reference
+- **[WHATSAPP_SETUP.md](WHATSAPP_SETUP.md)** — Meta Cloud API setup, deployment, task alerts, and source intake
 
 ### 2. Initial Setup (Admin Only)
 Edit `config.js` and add:
@@ -62,6 +63,8 @@ Edit `config.js` and add:
 - Create tasks assigned to specific intelligence needs
 - Comment on tasks for team discussion
 - Track task status (To do → In progress → Done)
+- Send opted-in assignees brief WhatsApp task alerts
+- Submit PDF/image sources through a guided WhatsApp intake
 
 ### Collection Plan
 - Editable document to record your research strategy

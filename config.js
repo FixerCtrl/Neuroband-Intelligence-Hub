@@ -14,6 +14,10 @@
 const SUPABASE_URL = "https://pqrwxsuumxrteehtkrnt.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_e7p5QOSrfHaPDH75YBE8xw_KGAakeGw";
 
+// Public WhatsApp Business number shown when members link their account.
+// This is not an API token or secret.
+const WHATSAPP_BUSINESS_NUMBER = "";
+
 // Your group's Key Intelligence Topic
 const KIT = "Evaluating the market entry requirements";
 

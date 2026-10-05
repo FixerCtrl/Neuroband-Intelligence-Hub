@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Insight Consulting — Neuroband Intelligence Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -31,16 +31,16 @@
 
     <nav class="nav">
       <div class="nav-group nav-primary" aria-label="Workspace">
-        <button class="nav-item is-active" data-tab="overview">Overview</button>
-        <button class="nav-item" data-tab="analysis">Analysis</button>
-        <button class="nav-item" data-tab="plan">Collection Plan</button>
-        <button class="nav-item" data-tab="repository">Repository</button>
-        <button class="nav-item" data-tab="team">Team</button>
-        <button class="nav-item" data-tab="activity">Activity</button>
+        <button class="nav-item is-active" data-tab="overview"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg><span>Overview</span></button>
+        <button class="nav-item" data-tab="analysis"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M4 20V11M10 20V5M16 20v-8M22 20V8"/></svg><span>Analysis</span></button>
+        <button class="nav-item" data-tab="plan"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5h6M9 10h6M9 14h6M9 18h3"/><path d="M9 2.5h6"/></svg><span>Collection Plan</span></button>
+        <button class="nav-item" data-tab="repository"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 7.5h7l2 2h9v9A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5z"/><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H10l2 2h6"/></svg><span>Repository</span></button>
+        <button class="nav-item" data-tab="team"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="9" cy="8" r="3.2"/><path d="M3 20v-1.5a5.8 5.8 0 0 1 11.6 0V20zM16 5.2a3.1 3.1 0 0 1 0 5.9M17 14a5.5 5.5 0 0 1 4 5.3V20h-3"/></svg><span>Team</span></button>
+        <button class="nav-item" data-tab="activity"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3 12h4l2.3-6 4.4 12 2.3-6H21"/></svg><span>Activity</span></button>
       </div>
       <div class="nav-group nav-admin" aria-label="System">
         <p class="nav-group-label">System</p>
-        <button class="nav-item" data-tab="manual">Manual</button>
+        <button class="nav-item" data-tab="manual"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M3.5 5.5A3.5 3.5 0 0 1 7 3h13.5v17H7a3.5 3.5 0 0 0-3.5 1z"/><path d="M3.5 5.5V21M8 7h8M8 11h8M8 15h5"/></svg><span>Manual</span></button>
       </div>
     </nav>
 
@@ -67,10 +67,15 @@
 
     <!-- OVERVIEW -->
     <section class="panel is-active" id="panel-overview">
-      <header class="panel-head">
-        <p class="eyebrow">Key Intelligence Topic</p>
+      <header class="panel-head overview-head">
+        <p class="eyebrow"><span>Key Intelligence Topic</span><span class="overview-level">KIT</span></p>
         <h1 id="kit-text" class="kit-statement"></h1>
       </header>
+
+      <section class="overview-pulse" aria-label="Research pulse">
+        <div class="overview-pulse-heading"><h2>Research pulse</h2><span>Current snapshot</span></div>
+        <div class="overview-metrics" id="overview-metrics"></div>
+      </section>
 
       <div class="kin-grid" id="kin-grid"></div>
     </section>
@@ -114,7 +119,7 @@
       </header>
       <div class="doc-block" data-slug="collection_plan">
         <div class="doc-view" id="view-collection_plan"></div>
-        <textarea class="doc-edit is-hidden" id="edit-collection_plan"></textarea>
+        <div class="doc-edit is-hidden" id="edit-collection_plan" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Edit collection plan"></div>
         <div class="doc-actions">
           <button class="btn btn-ghost" data-edit="collection_plan">Edit</button>
           <button class="btn btn-primary is-hidden" data-save="collection_plan">Save changes</button>
@@ -175,17 +180,19 @@
         <h1>Team</h1>
       </header>
 
-      <div id="your-profile-slot"></div>
+      <section class="team-section team-workspace" aria-labelledby="team-workspace-title">
+        <header class="team-section-heading">
+          <h2 id="team-workspace-title">Your workspace</h2>
+        </header>
+        <!-- PERSONAL DASHBOARD (visible only to logged-in users) -->
+        <div id="personal-dashboard" class="personal-dashboard is-hidden">
+          <div class="section-subhead">
+            <h2>My schedule &amp; tasks</h2>
+          </div>
 
-      <!-- PERSONAL DASHBOARD (visible only to logged-in users) -->
-      <div id="personal-dashboard" class="personal-dashboard is-hidden">
-        <div class="section-subhead">
-          <h2>Personal Dashboard: My Work</h2>
-        </div>
+          <div class="my-work-summary" id="my-work-counts"></div>
 
-        <div class="my-work-summary" id="my-work-counts"></div>
-
-        <div class="my-work-layout">
+          <div class="my-work-layout">
           <!-- Calendar Section -->
           <div class="my-work-calendar-section">
             <div class="my-work-calendar-controls">
@@ -211,26 +218,49 @@
             <div class="my-work-list" id="my-work-list"></div>
             <p class="empty-state is-hidden" id="my-work-empty">No tasks assigned to you yet. Tasks you're assigned to will appear here.</p>
           </div>
+          </div>
         </div>
-      </div>
 
-      <div class="section-subhead">
-        <h2>Team directory</h2>
-      </div>
-      <p class="team-directory-note" id="team-directory-note">Team member details are visible to admins.</p>
-      <div class="member-grid" id="member-grid"></div>
+        <div class="team-workspace-details">
+          <div id="your-profile-slot"></div>
 
-      <div class="section-subhead">
-        <h2>Assigned work</h2>
-      </div>
-      <div class="task-view-controls" role="tablist" aria-label="Task views">
-        <button class="task-view-btn is-active" type="button" role="tab" aria-selected="true" data-task-view="mine">My tasks</button>
-        <button class="task-view-btn" type="button" role="tab" aria-selected="false" data-task-view="attention">Needs attention</button>
-        <button class="task-view-btn" type="button" role="tab" aria-selected="false" data-task-view="all">All tasks</button>
-        <button class="task-assign-btn" type="button" id="open-add-task">+ Assign task</button>
-      </div>
-      <div class="task-list" id="task-list"></div>
-      <p class="empty-state is-hidden" id="task-empty-state">No tasks assigned yet.</p>
+          <section class="whatsapp-settings is-hidden" id="whatsapp-settings" aria-labelledby="whatsapp-settings-title">
+            <div class="whatsapp-settings-copy">
+              <p class="eyebrow">WhatsApp</p>
+              <h3 id="whatsapp-settings-title">Task alerts &amp; source intake</h3>
+              <p id="whatsapp-settings-status">Connect your number to receive brief task alerts and submit PDF/image sources by chat.</p>
+              <p class="whatsapp-link-instructions is-hidden" id="whatsapp-link-instructions" aria-live="polite"></p>
+              <a class="whatsapp-open-link is-hidden" id="whatsapp-open-link" target="_blank" rel="noopener noreferrer">Open WhatsApp</a>
+            </div>
+            <div class="whatsapp-settings-actions">
+              <button class="btn btn-primary btn-small" type="button" id="whatsapp-connect">Connect WhatsApp</button>
+              <button class="btn btn-ghost btn-small is-hidden" type="button" id="whatsapp-disconnect">Disconnect</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="team-section team-tasks-section" aria-labelledby="team-tasks-title">
+        <header class="section-subhead team-section-head">
+          <h2 id="team-tasks-title">Team tasks &amp; discussion</h2>
+          <button class="task-assign-btn" type="button" id="open-add-task">+ Assign task</button>
+        </header>
+        <div class="task-view-controls" role="tablist" aria-label="Task views">
+          <button class="task-view-btn is-active" type="button" role="tab" aria-selected="true" data-task-view="mine">My tasks</button>
+          <button class="task-view-btn" type="button" role="tab" aria-selected="false" data-task-view="attention">Needs attention</button>
+          <button class="task-view-btn" type="button" role="tab" aria-selected="false" data-task-view="all">All tasks</button>
+        </div>
+        <div class="task-list" id="task-list"></div>
+        <p class="empty-state is-hidden" id="task-empty-state">No tasks assigned yet.</p>
+      </section>
+
+      <section class="team-section team-directory-section" aria-labelledby="team-directory-title">
+        <header class="section-subhead team-section-head">
+          <h2 id="team-directory-title">Team directory</h2>
+        </header>
+        <p class="team-directory-note" id="team-directory-note">Team member details are visible to admins.</p>
+        <div class="member-grid" id="member-grid"></div>
+      </section>
     </section>
 
     <!-- ACTIVITY -->
@@ -240,8 +270,24 @@
         <h1>Activity</h1>
       </header>
       <p class="hint" style="margin-top:-20px; margin-bottom:28px;">A permanent, append-only record of changes to this system — nobody, including admins, can edit or delete entries here. Updates live automatically as your group works.</p>
+      <div class="filter-bar activity-filters">
+        <div class="filter-search-wrap">
+          <svg class="filter-search-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="10.8" cy="10.8" r="6.3" /><path d="m15.5 15.5 4.2 4.2" /></svg>
+          <input type="search" id="activity-search" aria-label="Search activity" placeholder="Search user, action, or details…" />
+        </div>
+        <select id="activity-filter-user" aria-label="Filter activity by user"><option value="">All users</option></select>
+        <select id="activity-filter-action" aria-label="Filter activity by action"><option value="">All actions</option></select>
+        <select id="activity-filter-period" aria-label="Filter activity by time period">
+          <option value="">Any time</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="older">Older than 90 days</option>
+        </select>
+      </div>
+      <p class="activity-filter-summary is-hidden" id="activity-filter-summary" aria-live="polite"></p>
       <div class="activity-list" id="activity-list"></div>
-      <p class="empty-state is-hidden" id="activity-empty-state">No activity recorded yet.</p>
+      <p class="empty-state is-hidden" id="activity-empty-state" role="status">No activity recorded yet.</p>
     </section>
 
     <!-- MANUAL -->
@@ -252,7 +298,7 @@
       </header>
       <div class="doc-block" data-slug="manual">
         <div class="doc-view" id="view-manual"></div>
-        <textarea class="doc-edit is-hidden" id="edit-manual"></textarea>
+        <div class="doc-edit is-hidden" id="edit-manual" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Edit system manual"></div>
         <div class="doc-actions">
           <button class="btn btn-ghost" data-edit="manual">Edit</button>
           <button class="btn btn-primary is-hidden" data-save="manual">Save changes</button>
@@ -359,9 +405,12 @@
 
 <!-- ADD TASK MODAL -->
 <div class="modal-overlay is-hidden" id="task-modal-overlay">
-  <div class="modal">
-    <div class="modal-head">
-      <h2>Assign a task</h2>
+  <div class="modal task-modal">
+    <div class="modal-head task-modal-head">
+      <div>
+        <h2>Assign a task</h2>
+        <p class="task-modal-intro">Give a teammate a clear next step, owner, and due date.</p>
+      </div>
       <button class="modal-close" id="close-add-task">&times;</button>
     </div>
     <form id="task-form">
@@ -371,10 +420,10 @@
 
       <div class="field-row">
         <label>Assigned to
-          <select id="t-assigned-to" required></select>
+          <select id="t-assigned-to" required><option value="">Choose a teammate</option></select>
         </label>
         <label>Assigned by
-          <select id="t-assigned-by" required></select>
+          <input type="text" id="t-assigned-by-name" class="task-assigned-by-display" value="Signed-in team member" readonly aria-readonly="true" />
         </label>
       </div>
 

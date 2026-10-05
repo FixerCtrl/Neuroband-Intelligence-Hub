@@ -48,6 +48,28 @@ alter table members add column if not exists user_id uuid references auth.users(
 alter table members add column if not exists last_seen_at timestamptz;
 alter table members add column if not exists last_login_at timestamptz;
 
+-- Private WhatsApp linking, notification consent, and source-intake state.
+create table if not exists member_whatsapp (
+  member_id uuid primary key references members(id) on delete cascade,
+  phone_e164 text unique,
+  opted_in_at timestamptz,
+  linked_at timestamptz,
+  link_code_hash text,
+  link_code_expires_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists whatsapp_intake_sessions (
+  phone_e164 text primary key,
+  member_id uuid not null references members(id) on delete cascade,
+  step text not null,
+  payload jsonb not null default '{}'::jsonb,
+  file_path text,
+  file_name text,
+  mime_type text,
+  updated_at timestamptz not null default now()
+);
+
 -- One profile per signed-in user — enforced at the database level
 -- so it can't be bypassed even outside the app's UI.
 create unique index if not exists members_user_id_unique on members(user_id) where user_id is not null;
@@ -108,6 +130,8 @@ $$ language sql stable;
 alter table entries enable row level security;
 alter table documents enable row level security;
 alter table members enable row level security;
+alter table member_whatsapp enable row level security;
+alter table whatsapp_intake_sessions enable row level security;
 alter table tasks enable row level security;
 alter table task_comments enable row level security;
 
@@ -156,6 +180,10 @@ create policy "Users or admin update member profile" on members for update
   using (user_id = auth.uid() or is_admin());
 create policy "Admin delete on members" on members for delete using (is_admin());
 
+drop policy if exists "Users read own WhatsApp settings" on member_whatsapp;
+create policy "Users read own WhatsApp settings" on member_whatsapp for select
+  using (member_id in (select id from members where user_id = auth.uid()) or is_admin());
+
 drop policy if exists "Allow all read on tasks" on tasks;
 drop policy if exists "Allow all insert on tasks" on tasks;
 drop policy if exists "Allow all update on tasks" on tasks;
@@ -166,7 +194,11 @@ drop policy if exists "Authenticated update on tasks" on tasks;
 drop policy if exists "Admin delete on tasks" on tasks;
 drop policy if exists "Task assignee or admin update on tasks" on tasks;
 create policy "Public read on tasks" on tasks for select using (true);
-create policy "Authenticated insert on tasks" on tasks for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated insert on tasks" on tasks for insert
+  with check (
+    auth.role() = 'authenticated'
+    and assigned_by in (select id from members where user_id = auth.uid())
+  );
 create policy "Task assignee or admin update on tasks" on tasks for update
   using (
     assigned_to in (select id from members where user_id = auth.uid())

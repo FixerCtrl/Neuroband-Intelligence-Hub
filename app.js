@@ -75,6 +75,7 @@ let currentUser = null;
 let currentActivity = [];
 let calendarCurrentDate = new Date();
 let myWorkFilter = "all";
+let whatsappLinkPoll = null;
 
 function safeId(id){
   const el = document.getElementById(id);
@@ -99,6 +100,8 @@ document.addEventListener("DOMContentLoaded", () => {
   wireTaskViews();
   wireAuthModal();
   wireNotifications();
+  wireWhatsAppSettings();
+  wireActivityFilters();
   populateFormDropdowns();
   loadDocument("collection_plan");
   loadDocument("manual");
@@ -156,6 +159,7 @@ function refreshIdentityUI(){
   renderMembers();   // re-show/hide admin-only controls and refresh the profile card
   renderTasks();
   renderNotifications();
+  loadWhatsAppSettings();
 }
 
 function renderAuthBox(){
@@ -175,7 +179,9 @@ function renderAuthBox(){
   box.innerHTML = `
     <div class="auth-signed-in">
       <div class="auth-identity-row">
-        <div class="auth-mini-avatar">${avatarUrl ? `<img src="${avatarUrl}" alt="" />` : initials(mine ? mine.name : currentUser.email.split("@")[0])}</div>
+        <button type="button" class="auth-mini-avatar" id="auth-profile-avatar" aria-label="Edit your profile and profile picture" title="Edit profile">
+          ${avatarUrl ? `<img src="${avatarUrl}" alt="" />` : initials(mine ? mine.name : currentUser.email.split("@")[0])}
+        </button>
         <div class="auth-identity-text">
           ${admin ? `<span class="auth-admin-badge">ADMIN</span>` : ""}
           <span class="auth-email">${escapeHtml(displayName)}</span>
@@ -187,6 +193,120 @@ function renderAuthBox(){
   document.getElementById("sign-out-btn").addEventListener("click", async () => {
     await sbClient.auth.signOut();
   });
+  document.getElementById("auth-profile-avatar").addEventListener("click", () => {
+    activateTab("team");
+    openOwnProfileEditor();
+  });
+}
+
+function wireWhatsAppSettings(){
+  const connect = safeId("whatsapp-connect");
+  const disconnect = safeId("whatsapp-disconnect");
+  if (!connect || !disconnect) return;
+
+  connect.addEventListener("click", async () => {
+    if (!requireAuth()) return;
+    const businessNumber = typeof WHATSAPP_BUSINESS_NUMBER === "string" ? WHATSAPP_BUSINESS_NUMBER.trim() : "";
+    if (!businessNumber) {
+      safeId("whatsapp-settings-status").textContent = "The WhatsApp Business number has not been configured yet.";
+      return;
+    }
+    connect.disabled = true;
+    safeId("whatsapp-settings-status").textContent = "Generating a secure link code…";
+    try {
+      const { data, error } = await sbClient.functions.invoke("whatsapp-link-code", { body: {} });
+      if (error) throw error;
+      const number = businessNumber.replace(/\D/g, "");
+      const phrase = `CONNECT ${data.code}`;
+      const instructions = safeId("whatsapp-link-instructions");
+      instructions.textContent = `Send ${phrase} to ${businessNumber} on WhatsApp within 10 minutes. Sending the code links your number and opts you in to brief task-assignment alerts. Disconnect any time.`;
+      instructions.classList.remove("is-hidden");
+      const link = safeId("whatsapp-open-link");
+      link.href = `https://wa.me/${number}?text=${encodeURIComponent(phrase)}`;
+      link.classList.remove("is-hidden");
+      safeId("whatsapp-settings-status").textContent = "Finish linking from your WhatsApp account:";
+      if (whatsappLinkPoll) clearInterval(whatsappLinkPoll);
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      whatsappLinkPoll = setInterval(async () => {
+        const connected = await loadWhatsAppSettings();
+        if (connected || Date.now() >= expiresAt) {
+          clearInterval(whatsappLinkPoll);
+          whatsappLinkPoll = null;
+          if (!connected) safeId("whatsapp-settings-status").textContent = "The link code expired. Generate a new one to try again.";
+        }
+      }, 10000);
+    } catch (error) {
+      console.error("Could not create WhatsApp link code:", error);
+      safeId("whatsapp-settings-status").textContent = "WhatsApp linking is not available yet. Check that the Edge Functions and database setup are deployed.";
+    } finally {
+      connect.disabled = false;
+    }
+  });
+
+  disconnect.addEventListener("click", async () => {
+    if (!requireAuth()) return;
+    disconnect.disabled = true;
+    try {
+      const { error } = await sbClient.functions.invoke("whatsapp-disconnect", { body: {} });
+      if (error) throw error;
+      if (whatsappLinkPoll) clearInterval(whatsappLinkPoll);
+      whatsappLinkPoll = null;
+      safeId("whatsapp-link-instructions").classList.add("is-hidden");
+      safeId("whatsapp-open-link").classList.add("is-hidden");
+      await loadWhatsAppSettings();
+    } catch (error) {
+      console.error("Could not disconnect WhatsApp:", error);
+      safeId("whatsapp-settings-status").textContent = "Could not disconnect WhatsApp. Please try again.";
+    } finally {
+      disconnect.disabled = false;
+    }
+  });
+}
+
+async function loadWhatsAppSettings(){
+  const panel = safeId("whatsapp-settings");
+  const status = safeId("whatsapp-settings-status");
+  const connect = safeId("whatsapp-connect");
+  const disconnect = safeId("whatsapp-disconnect");
+  if (!panel || !status || !connect || !disconnect) return false;
+  if (!currentUser || !sbClient) {
+    panel.classList.add("is-hidden");
+    return false;
+  }
+
+  panel.classList.remove("is-hidden");
+  const mine = myMemberProfile();
+  if (!mine) {
+    status.textContent = "Add your profile to the Team roster before connecting WhatsApp.";
+    connect.disabled = true;
+    disconnect.classList.add("is-hidden");
+    return false;
+  }
+
+  connect.disabled = false;
+  const { data, error } = await sbClient.from("member_whatsapp")
+    .select("phone_e164,opted_in_at")
+    .eq("member_id", mine.id)
+    .maybeSingle();
+  if (error) {
+    status.textContent = "WhatsApp settings are unavailable. Run the latest database setup and deploy the Edge Functions.";
+    disconnect.classList.add("is-hidden");
+    return false;
+  }
+  if (data?.phone_e164 && data.opted_in_at) {
+    status.textContent = `Connected to ${data.phone_e164}. Brief task-assignment alerts are enabled; source files can be sent in WhatsApp.`;
+    connect.classList.add("is-hidden");
+    disconnect.classList.remove("is-hidden");
+    safeId("whatsapp-link-instructions").classList.add("is-hidden");
+    safeId("whatsapp-open-link").classList.add("is-hidden");
+    return true;
+  }
+
+  status.textContent = "Connect your number to receive brief task alerts and submit PDF/image sources by chat.";
+  connect.textContent = "Connect WhatsApp";
+  connect.classList.remove("is-hidden");
+  disconnect.classList.add("is-hidden");
+  return false;
 }
 
 function wireNotifications(){
@@ -199,11 +319,7 @@ function wireNotifications(){
     renderNotifications();
   });
   markRead.addEventListener("click", () => {
-    const latestNotification = [...currentActivity, ...currentTaskComments, ...currentTasks].reduce((latest, item) => {
-      const createdAt = new Date(item.created_at).getTime();
-      return Number.isFinite(createdAt) && createdAt > latest ? createdAt : latest;
-    }, 0);
-    localStorage.setItem(notificationSeenStorageKey(), new Date(latestNotification || Date.now()).toISOString());
+    localStorage.setItem(notificationSeenStorageKey(), new Date().toISOString());
     renderNotifications();
   });
 }
@@ -236,24 +352,27 @@ function renderNotifications(){
   const seenAt = new Date(localStorage.getItem(notificationSeenStorageKey()) || 0).getTime();
   const mine = myMemberProfile();
   const taskAssignments = currentTasks
-    .filter(task => currentUser && mine && task.assigned_to === mine.id)
+    .filter(task => currentUser && mine && task.assigned_to === mine.id && task.assigned_by !== mine.id)
     .map(task => ({ ...task, action: "New task assigned", details: task.title }));
   const taskNotifications = currentTaskComments
     .filter(comment => {
       const task = currentTasks.find(item => String(item.id) === String(comment.task_id));
-      return currentUser && mine && comment.author_id !== mine.id && task && (task.assigned_to === mine.id || task.assigned_by === mine.id || isAdminEmail(currentUser.email));
+      return currentUser && mine && comment.author_id !== mine.id && task && (task.assigned_to === mine.id || task.assigned_by === mine.id);
     })
     .map(comment => {
       const task = currentTasks.find(item => String(item.id) === String(comment.task_id));
       return { ...comment, action: `Comment on ${task ? task.title : "assigned task"}`, details: comment.body };
     });
-  const notifications = [...currentActivity, ...taskAssignments, ...taskNotifications].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const importantActivity = currentActivity.filter(activity => isImportantActivityForMember(activity, mine));
+  const notifications = [...importantActivity, ...taskAssignments, ...taskNotifications]
+    .filter(item => Number.isFinite(new Date(item.created_at).getTime()) && new Date(item.created_at).getTime() > seenAt)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const recent = notifications.slice(0, 8);
-  const unread = notifications.filter(item => new Date(item.created_at).getTime() > seenAt).length;
+  const unread = notifications.length;
   count.textContent = unread > 9 ? "9+" : String(unread);
   count.classList.toggle("is-hidden", unread === 0);
   if (!recent.length) {
-    list.innerHTML = `<p class="notification-empty">No activity yet.</p>`;
+    list.innerHTML = `<p class="notification-empty">You're all caught up. Full history is available in Activity.</p>`;
     return;
   }
 
@@ -279,6 +398,23 @@ function renderNotifications(){
       }).join("")}
     </section>
   `).join("");
+}
+
+function isImportantActivityForMember(activity, mine){
+  if (!currentUser || !mine || activity.actor_email === currentUser.email) return false;
+  const action = activity.action || "";
+  const details = activity.details || "";
+  if (action === "reassigned a task") return details.includes(`to ${mine.name}`);
+  if (action === "changed task status") {
+    const match = details.match(/^"(.+)" → /);
+    return !!match && currentTasks.some(task => task.title === match[1] && (task.assigned_to === mine.id || task.assigned_by === mine.id));
+  }
+  return [
+    "deleted a task",
+    "removed a team member",
+    "updated the Collection Plan",
+    "updated the Manual",
+  ].includes(action);
 }
 
 // Call this at the top of anything that writes to the database.
@@ -409,14 +545,24 @@ function initSupabase(){
 // ---------- NAV ----------
 function wireNav(){
   document.querySelectorAll(".nav-item").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("is-active"));
-      document.querySelectorAll(".panel").forEach(p => p.classList.remove("is-active"));
-      btn.classList.add("is-active");
-      document.getElementById("panel-" + btn.dataset.tab).classList.add("is-active");
-      closeMobileSidebar();
-    });
+    btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });
+  document.getElementById("overview-metrics").addEventListener("click", event => {
+    const metric = event.target.closest("[data-overview-tab]");
+    if (!metric) return;
+    activateTab(metric.dataset.overviewTab);
+    if (metric.dataset.overviewTaskView) {
+      document.querySelector(`[data-task-view="${metric.dataset.overviewTaskView}"]`)?.click();
+    }
+  });
+}
+
+function activateTab(tab){
+  const panel = document.getElementById(`panel-${tab}`);
+  if (!panel) return;
+  document.querySelectorAll(".nav-item").forEach(button => button.classList.toggle("is-active", button.dataset.tab === tab));
+  document.querySelectorAll(".panel").forEach(item => item.classList.toggle("is-active", item === panel));
+  closeMobileSidebar();
 }
 
 function wireMobileSidebar(){
@@ -453,15 +599,47 @@ function closeMobileSidebar(){
 // ---------- OVERVIEW ----------
 function renderOverview(){
   document.getElementById("kit-text").textContent = KIT;
+  const metrics = document.getElementById("overview-metrics");
+  const trackedQuestionKeys = new Set(KINS.flatMap(kin => kin.kiqs.map(question => `${kin.id}_${question.id}`)));
+  const coveredQuestionKeys = new Set(currentEntries
+    .map(entry => `${entry.kin}_${entry.kiq}`)
+    .filter(key => trackedQuestionKeys.has(key)));
+  const totalQuestions = trackedQuestionKeys.size;
+  const openTasks = currentTasks.filter(task => task.status !== "Done").length;
+  metrics.innerHTML = [
+    { value: currentEntries.length, label: "Sources collected", destination: "Repository", tab: "repository" },
+    { value: `${coveredQuestionKeys.size}/${totalQuestions}`, label: "KIQs with evidence", destination: "Analysis", tab: "analysis" },
+    { value: openTasks, label: "Open tasks", destination: "Team", tab: "team", taskView: "all" },
+  ].map(metric => `
+    <button type="button" class="overview-metric" data-overview-tab="${metric.tab}" ${metric.taskView ? `data-overview-task-view="${metric.taskView}"` : ""}>
+      <span class="overview-metric-top"><span>${metric.label}</span><span aria-hidden="true">↗</span></span>
+      <strong>${metric.value}</strong>
+      <span class="overview-metric-destination">View ${metric.destination}</span>
+    </button>
+  `).join("");
+
   const grid = document.getElementById("kin-grid");
   grid.innerHTML = "";
   KINS.forEach(kin => {
-    const card = document.createElement("div");
+    const coveredQuestions = kin.kiqs.filter(question => currentEntries.some(entry => entry.kin === kin.id && entry.kiq === question.id)).length;
+    const coveragePercent = kin.kiqs.length ? Math.round((coveredQuestions / kin.kiqs.length) * 100) : 0;
+    const sourceCount = currentEntries.filter(entry => entry.kin === kin.id).length;
+    const card = document.createElement("article");
     card.className = "kin-card";
     card.innerHTML = `
-      <span class="kin-id">${kin.id}</span>
-      <h3>${escapeHtml(kin.label)}</h3>
-      <ul>${kin.kiqs.map(q => `<li><strong>${q.id}</strong> — ${escapeHtml(q.label)}</li>`).join("")}</ul>
+      <div class="kin-card-heading">
+        <div class="kin-card-kicker"><span class="kin-id">${escapeHtml(kin.id)}</span><span class="kin-kind">Key Intelligence Need</span></div>
+        <h2>${escapeHtml(kin.label)}</h2>
+      </div>
+      <div class="kin-coverage">
+        <div class="kin-coverage-heading"><span>Evidence coverage</span><strong>${coveredQuestions}/${kin.kiqs.length} KIQs</strong></div>
+        <div class="kin-coverage-track" role="meter" aria-label="${escapeHtml(kin.id)} question coverage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${coveragePercent}"><span style="width:${coveragePercent}%"></span></div>
+        <span class="kin-source-count">${sourceCount} ${sourceCount === 1 ? "source" : "sources"}</span>
+      </div>
+      <section class="kiq-section" aria-label="Key Intelligence Questions">
+        <div class="kiq-section-heading"><h3>Key Intelligence Questions</h3><span class="kiq-count">${kin.kiqs.length}</span></div>
+        <ol class="kiq-list">${kin.kiqs.map(q => `<li><span class="kiq-id">${escapeHtml(q.id)}</span><span class="kiq-text">${escapeHtml(q.label)}</span></li>`).join("")}</ol>
+      </section>
     `;
     grid.appendChild(card);
   });
@@ -530,6 +708,46 @@ function renderAnalysisBars(elementId, items){
 
 // ---------- DOCUMENT BLOCKS (Collection Plan / Manual) ----------
 function wireDocBlocks(){
+  document.querySelectorAll(".doc-block").forEach(block => {
+    const slug = block.dataset.slug;
+    const editor = block.querySelector(".doc-edit");
+    const toolbar = document.createElement("div");
+    toolbar.className = "doc-toolbar is-hidden";
+    toolbar.setAttribute("role", "toolbar");
+    toolbar.setAttribute("aria-label", `Formatting tools for ${slug === "manual" ? "System Manual" : "Collection Plan"}`);
+    toolbar.innerHTML = `
+      <button type="button" data-doc-command="bold" aria-label="Bold" aria-pressed="false" title="Bold"><strong>B</strong></button>
+      <button type="button" data-doc-command="italic" aria-label="Italic" aria-pressed="false" title="Italic"><em>I</em></button>
+      <button type="button" data-doc-command="underline" aria-label="Underline" aria-pressed="false" title="Underline"><u>U</u></button>
+      <span class="doc-toolbar-divider" aria-hidden="true"></span>
+      <button type="button" data-doc-command="formatBlock" data-doc-value="H2" aria-label="Heading" title="Heading">H2</button>
+      <button type="button" data-doc-command="formatBlock" data-doc-value="H3" aria-label="Subheading" title="Subheading">H3</button>
+      <span class="doc-toolbar-divider" aria-hidden="true"></span>
+      <button type="button" data-doc-command="insertUnorderedList" aria-label="Bulleted list" title="Bulleted list">• List</button>
+      <button type="button" data-doc-command="insertOrderedList" aria-label="Numbered list" title="Numbered list">1. List</button>
+      <button type="button" data-doc-command="formatBlock" data-doc-value="BLOCKQUOTE" aria-label="Quote" title="Quote">Quote</button>
+      <button type="button" data-doc-command="removeFormat" aria-label="Clear formatting" title="Clear formatting">Clear</button>
+    `;
+    block.insertBefore(toolbar, editor);
+
+    toolbar.querySelectorAll("[data-doc-command]").forEach(button => {
+      button.addEventListener("mousedown", event => event.preventDefault());
+      button.addEventListener("click", () => {
+        editor.focus();
+        const command = button.dataset.docCommand;
+        const value = button.dataset.docValue || null;
+        document.execCommand(command, false, value);
+        refreshDocToolbar(toolbar);
+      });
+    });
+    editor.addEventListener("keyup", () => refreshDocToolbar(toolbar));
+    editor.addEventListener("mouseup", () => refreshDocToolbar(toolbar));
+    editor.addEventListener("paste", event => {
+      event.preventDefault();
+      document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+    });
+  });
+
   document.querySelectorAll("[data-edit]").forEach(btn => {
     btn.addEventListener("click", () => {
       if (!requireAuth()) return;
@@ -547,15 +765,85 @@ function wireDocBlocks(){
   });
 }
 
+function refreshDocToolbar(toolbar){
+  toolbar.querySelectorAll('[data-doc-command="bold"], [data-doc-command="italic"], [data-doc-command="underline"]').forEach(button => {
+    const pressed = document.queryCommandState(button.dataset.docCommand);
+    button.classList.toggle("is-active", pressed);
+    button.setAttribute("aria-pressed", String(pressed));
+  });
+}
+
+const RICH_DOCUMENT_PREFIX = "<!-- neuroband-rich-text-v1 -->\n";
+const SAFE_DOCUMENT_TAGS = new Set(["B", "STRONG", "I", "EM", "U", "S", "P", "DIV", "BR", "H2", "H3", "UL", "OL", "LI", "BLOCKQUOTE"]);
+
+function sanitizeDocumentHtml(html){
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const sanitizeElement = element => {
+    if (!SAFE_DOCUMENT_TAGS.has(element.tagName)) {
+      if (["SCRIPT", "STYLE", "IFRAME", "OBJECT", "SVG", "MATH"].includes(element.tagName)) {
+        element.remove();
+      } else {
+        [...element.childNodes].forEach(sanitizeNode);
+        element.replaceWith(...element.childNodes);
+      }
+      return;
+    }
+    [...element.attributes].forEach(attribute => element.removeAttribute(attribute.name));
+    [...element.childNodes].forEach(sanitizeNode);
+  };
+  const sanitizeNode = node => {
+    if (node.nodeType === Node.ELEMENT_NODE) sanitizeElement(node);
+  };
+  [...template.content.childNodes].forEach(sanitizeNode);
+  return template.innerHTML;
+}
+
+function plainDocumentToHtml(text){
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const output = [];
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    if (!line.trim()) { index++; continue; }
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
+        items.push(`<li>${escapeHtml(lines[index++].replace(/^\s*[-*]\s+/, ""))}</li>`);
+      }
+      output.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+    if (/^\s*\d+[.)]\s+/.test(line)) {
+      const items = [];
+      while (index < lines.length && /^\s*\d+[.)]\s+/.test(lines[index])) {
+        items.push(`<li>${escapeHtml(lines[index++].replace(/^\s*\d+[.)]\s+/, ""))}</li>`);
+      }
+      output.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9 &/()'-]{2,48}$/.test(line.trim())) output.push(`<h3>${escapeHtml(line.trim())}</h3>`);
+    else output.push(`<p>${escapeHtml(line)}</p>`);
+    index++;
+  }
+  return output.join("");
+}
+
+function documentContentToHtml(content){
+  if (content.startsWith(RICH_DOCUMENT_PREFIX)) return sanitizeDocumentHtml(content.slice(RICH_DOCUMENT_PREFIX.length));
+  return plainDocumentToHtml(content);
+}
+
 function toggleEdit(slug, editing){
   document.getElementById("view-" + slug).classList.toggle("is-hidden", editing);
   document.getElementById("edit-" + slug).classList.toggle("is-hidden", !editing);
   const block = document.querySelector(`.doc-block[data-slug="${slug}"]`);
+  block.querySelector(".doc-toolbar").classList.toggle("is-hidden", !editing);
   block.querySelector(`[data-edit]`).classList.toggle("is-hidden", editing);
   block.querySelector(`[data-save]`).classList.toggle("is-hidden", !editing);
   block.querySelector(`[data-cancel]`).classList.toggle("is-hidden", !editing);
   if (editing) {
-    document.getElementById("edit-" + slug).value = document.getElementById("view-" + slug).dataset.raw || DEFAULT_DOCS[slug];
+    document.getElementById("edit-" + slug).innerHTML = documentContentToHtml(document.getElementById("view-" + slug).dataset.raw || DEFAULT_DOCS[slug]);
+    document.getElementById("edit-" + slug).focus();
   }
 }
 
@@ -566,14 +854,16 @@ async function loadDocument(slug){
     const { data, error } = await sbClient.from("documents").select("content").eq("slug", slug).maybeSingle();
     if (!error && data) content = data.content;
   }
-  viewEl.textContent = content;
+  viewEl.innerHTML = documentContentToHtml(content);
   viewEl.dataset.raw = content;
 }
 
 async function saveDocument(slug){
   if (!requireAuth()) return;
-  const newContent = document.getElementById("edit-" + slug).value;
-  document.getElementById("view-" + slug).textContent = newContent;
+  const editor = document.getElementById("edit-" + slug);
+  const cleanHtml = sanitizeDocumentHtml(editor.innerHTML);
+  const newContent = RICH_DOCUMENT_PREFIX + cleanHtml;
+  document.getElementById("view-" + slug).innerHTML = cleanHtml;
   document.getElementById("view-" + slug).dataset.raw = newContent;
   toggleEdit(slug, false);
   if (sbClient) {
@@ -737,6 +1027,7 @@ async function loadEntries(){
   document.getElementById("entry-count").textContent = `${currentEntries.length} ${currentEntries.length === 1 ? "entry" : "entries"} stored`;
   renderEntries();
   renderAnalysis();
+  renderOverview();
 }
 
 function renderEntries(){
@@ -918,11 +1209,14 @@ async function loadMembers(){
   if (canManageLeadership()) {
     await sbClient.from("members").delete().is("user_id", null).in("name", ["FixerCtrl", "Team 01"]);
   }
-  const memberFields = canManageLeadership() ? "*" : "id,name,avatar_path,bio,user_id,created_at";
+  const memberFields = canManageLeadership() ? "*" : currentUser
+    ? "id,name,avatar_path,bio,user_id,created_at,last_seen_at"
+    : "id,name,avatar_path,bio,user_id,created_at";
   const { data, error } = await sbClient.from("members").select(memberFields).order("created_at", { ascending: true });
   if (!error && data) currentMembers = data;
   renderMembers();
   renderAuthBox(); // members just loaded, so the sidebar can now show your claimed avatar/name
+  await loadWhatsAppSettings();
   populateTaskPeopleDropdowns();
   renderTasks();
   renderNotifications();
@@ -941,7 +1235,9 @@ function renderMembers(){
     ? currentMembers
     : currentMembers.filter(member => member.user_id && member.user_id !== currentUser?.id);
   if (directoryNote) {
-    directoryNote.textContent = canModerate ? "Admin view: presence and login history are visible only to admins." : "Your profile is shown above. Other team members are listed here.";
+    directoryNote.textContent = canModerate
+      ? "Admin view: online status, last seen, and login history."
+      : "Online status and last seen are visible to signed-in team members. Login history is admin-only.";
     directoryNote.classList.toggle("is-hidden", visibleMembers.length === 0);
   }
   visibleMembers.forEach(m => {
@@ -956,7 +1252,7 @@ function renderMembers(){
       </div>
       <div class="member-name">${escapeHtml(m.name)}${m.user_id ? "" : ` <span style="color:var(--text-faint); font-weight:400; font-size:11px;">(unclaimed)</span>`}</div>
       ${m.bio ? `<div class="member-bio">${escapeHtml(m.bio)}</div>` : ""}
-      ${m.user_id ? `<div class="member-presence ${isMemberOnline(m) ? "is-online" : ""}"><span class="presence-dot"></span>${isMemberOnline(m) ? "Online now" : `Last seen ${formatPresenceTime(m.last_seen_at)}`}${m.last_login_at ? ` · Login ${formatPresenceTime(m.last_login_at)}` : ""}</div>` : ""}
+      ${currentUser && m.user_id ? `<div class="member-presence ${isMemberOnline(m) ? "is-online" : ""}"><span class="presence-dot"></span>${isMemberOnline(m) ? "Online now" : `Last seen ${formatPresenceTime(m.last_seen_at)}`}${canModerate && m.last_login_at ? ` · Login ${formatPresenceTime(m.last_login_at)}` : ""}</div>` : ""}
       ${canEditPhoto ? `<div class="member-avatar-hint">Click photo to update</div>` : ""}
     `;
     grid.appendChild(card);
@@ -1039,6 +1335,7 @@ function renderYourProfile(){
 
 function openOwnProfileEditor(){
   if (!requireAuth()) return;
+  memberEditorTargetId = null;
   const mine = myMemberProfile();
   document.getElementById("member-modal-title").textContent = mine ? "Edit profile" : "Complete profile";
   document.getElementById("m-name").value = mine ? mine.name : "";
@@ -1236,6 +1533,7 @@ async function loadTasks(){
   await loadTaskComments();
   renderTasks();
   renderAnalysis();
+  renderOverview();
 }
 
 async function loadTaskComments(){
@@ -1570,7 +1868,10 @@ function renderTasks(){
           ${t.kin ? `<span class="tag tag-kin">${t.kin}</span>` : ""}
           ${t.kiq ? `<span class="tag tag-kiq">${t.kiq}</span>` : ""}
         </div>
-        <div class="task-people">${personInlineHtml(t.assigned_to)} ← assigned by ${personInlineHtml(t.assigned_by)}</div>
+        <div class="task-people">
+          <div class="task-person"><span class="task-person-label">Assigned to</span>${personInlineHtml(t.assigned_to, "Unassigned")}</div>
+          <div class="task-person"><span class="task-person-label">Assigned by</span>${personInlineHtml(t.assigned_by, "Unknown")}</div>
+        </div>
       </div>
       <span class="task-due">${t.due_date ? "Due " + t.due_date : ""}</span>
       <div class="task-actions">
@@ -1583,13 +1884,25 @@ function renderTasks(){
         ${canReassign ? `<button class="btn btn-danger-ghost btn-small task-delete" data-task-id="${t.id}">Delete task</button>` : ""}
       </div>
       <div class="task-channel">
-        <div class="task-channel-head"><strong>Team channel</strong><span>${comments.length} comment${comments.length === 1 ? "" : "s"}</span></div>
-        <div class="task-comments">${taskCommentsUnavailable ? `<p class="task-comments-setup">Comments are temporarily unavailable. An admin needs to run the latest <strong>schema.sql</strong> in Supabase.</p>` : comments.length ? comments.map(comment => `
-          <div class="task-comment">
-            <div class="task-comment-meta"><strong>${escapeHtml(memberById(comment.author_id)?.name || comment.author_email || "Team member")}</strong><small>${relativeTime(comment.created_at)}</small></div>
-            <p>${escapeHtml(comment.body)}</p>
-          </div>
-        `).join("") : `<p class="task-comments-empty">Ask a question or leave a note about this task.</p>`}</div>
+        <div class="task-channel-head"><strong>Task conversation</strong><span>${comments.length} message${comments.length === 1 ? "" : "s"}</span></div>
+        <div class="task-comments">${taskCommentsUnavailable ? `<p class="task-comments-setup">Comments are temporarily unavailable. An admin needs to run the latest <strong>schema.sql</strong> in Supabase.</p>` : comments.length ? comments.map(comment => {
+          const author = memberById(comment.author_id);
+          const isAssignee = !!t.assigned_to && String(comment.author_id) === String(t.assigned_to);
+          const isAssigner = !!t.assigned_by && String(comment.author_id) === String(t.assigned_by);
+          const role = isAssignee ? "assignee" : isAssigner ? "assigner" : "team";
+          const roleLabel = isAssignee ? "Assignee" : isAssigner ? "Assigner" : "Team member";
+          const authorName = author?.name || comment.author_email || "Team member";
+          const avatarUrl = author ? getPublicAvatarUrl(author.avatar_path) : null;
+          return `
+            <div class="task-comment-row task-comment-row-${role}">
+              <span class="task-comment-avatar">${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="" />` : escapeHtml(initials(authorName))}</span>
+              <article class="task-comment task-comment-${role}">
+                <div class="task-comment-meta"><span class="task-comment-author"><strong>${escapeHtml(authorName)}</strong><span class="task-comment-role">${roleLabel}</span></span><small>${escapeHtml(relativeTime(comment.created_at))}</small></div>
+                <p>${escapeHtml(comment.body)}</p>
+              </article>
+            </div>
+          `;
+        }).join("") : `<p class="task-comments-empty">Ask a question or leave a note about this task.</p>`}</div>
         ${canCommentOnTask(t) && !taskCommentsUnavailable ? `<form class="task-comment-form" data-task-id="${t.id}"><input name="body" maxlength="500" placeholder="Ask a question or add a comment" required /><button class="btn btn-ghost btn-small" type="submit">Send</button></form>` : ""}
       </div>
     `;
@@ -1633,10 +1946,17 @@ function renderTasks(){
       const previousAssigner = task.assigned_by;
       const originalAssignee = currentAssignee ? currentAssignee.name : "Unassigned";
       try {
-        await sbClient.from("tasks").update({ assigned_to: selected.id, assigned_by: previousAssigner }).eq("id", task.id);
+        const { error } = await sbClient.from("tasks").update({ assigned_to: selected.id, assigned_by: previousAssigner }).eq("id", task.id);
+        if (error) throw error;
         task.assigned_to = selected.id;
         if (previousAssigner) task.assigned_by = previousAssigner;
         logActivity("reassigned a task", `"${task.title}" from ${originalAssignee} to ${selected.name}`);
+        try {
+          const { error: notificationError } = await sbClient.functions.invoke("whatsapp-task-assigned", { body: { task_id: task.id } });
+          if (notificationError) console.warn("WhatsApp reassignment alert was not sent:", notificationError);
+        } catch (notificationError) {
+          console.warn("WhatsApp reassignment alert was not sent:", notificationError);
+        }
         await loadTasks();
       } catch (err) {
         console.error(err);
@@ -1655,6 +1975,10 @@ function renderTasks(){
         alert("Could not delete task: " + error.message);
         return;
       }
+      currentTasks = currentTasks.filter(item => String(item.id) !== String(task.id));
+      renderTasks();
+      renderAnalysis();
+      renderOverview();
       logActivity("deleted a task", `"${task.title}"`);
       await loadTasks();
     });
@@ -1697,17 +2021,19 @@ async function updateTaskStatus(taskId, status){
   }
   await sbClient.from("tasks").update({ status }).eq("id", taskId);
   if (task) task.status = status;
+  renderOverview();
   logActivity("changed task status", task ? `"${task.title}" → ${status}` : `→ ${status}`);
 }
 
 function populateTaskPeopleDropdowns(){
   const to = document.getElementById("t-assigned-to");
-  const by = document.getElementById("t-assigned-by");
-  [to, by].forEach(sel => { sel.innerHTML = ""; });
+  const byName = document.getElementById("t-assigned-by-name");
+  to.innerHTML = `<option value="">Choose a teammate</option>`;
   currentMembers.forEach(m => {
     to.appendChild(new Option(m.name, m.id));
-    by.appendChild(new Option(m.name, m.id));
   });
+  const mine = myMemberProfile();
+  byName.value = mine ? `You — ${mine.name}` : "Complete your Team profile first";
 }
 
 function populateTaskKinKiqDropdowns(){
@@ -1729,10 +2055,15 @@ function wireTaskModal(){
   populateTaskKinKiqDropdowns();
   document.getElementById("open-add-task").addEventListener("click", () => {
     if (!requireAuth()) return;
+    if (!myMemberProfile()) {
+      alert("Complete your Team profile before assigning a task.");
+      return;
+    }
     if (currentMembers.length === 0) {
       alert("Add at least one team member first, so there's someone to assign the task to.");
       return;
     }
+    populateTaskPeopleDropdowns();
     document.getElementById("task-modal-overlay").classList.remove("is-hidden");
   });
   document.getElementById("close-add-task").addEventListener("click", closeAddTaskModal);
@@ -1752,13 +2083,15 @@ function closeAddTaskModal(){
 async function submitTask(e){
   e.preventDefault();
   if (!requireAuth()) return;
+  const assigner = myMemberProfile();
   const status = document.getElementById("task-form-status");
   if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
+  if (!assigner) { status.textContent = "Complete your Team profile before assigning a task."; status.className = "form-status is-error"; return; }
 
   const record = {
     title: document.getElementById("t-title").value,
     assigned_to: document.getElementById("t-assigned-to").value,
-    assigned_by: document.getElementById("t-assigned-by").value,
+    assigned_by: assigner.id,
     kin: document.getElementById("t-kin").value || null,
     kiq: document.getElementById("t-kiq").value || null,
     due_date: document.getElementById("t-due").value || null,
@@ -1767,12 +2100,26 @@ async function submitTask(e){
   };
 
   try {
-    const { error } = await sbClient.from("tasks").insert(record);
+    const { data: createdTask, error } = await sbClient.from("tasks").insert(record).select("id").single();
     if (error) throw error;
     const assignee = memberById(record.assigned_to);
     logActivity("assigned a task", `"${record.title}" to ${assignee ? assignee.name : "someone"}`);
     status.textContent = "Assigned.";
     status.className = "form-status is-success";
+    try {
+      const { data: notification, error: notificationError } = await sbClient.functions.invoke("whatsapp-task-assigned", { body: { task_id: createdTask.id } });
+      if (notificationError) {
+        console.warn("WhatsApp task notification was not sent:", notificationError);
+        status.textContent = "Assigned. The WhatsApp alert could not be sent; check the integration setup.";
+      } else if (notification?.sent) {
+        status.textContent = "Assigned. A WhatsApp alert was sent to the assignee.";
+      } else if (notification?.skipped) {
+        status.textContent = "Assigned. The assignee has not connected WhatsApp.";
+      }
+    } catch (notificationError) {
+      console.warn("WhatsApp task notification was not sent:", notificationError);
+      status.textContent = "Assigned. The WhatsApp alert could not be sent; check the integration setup.";
+    }
     await loadTasks();
     setTimeout(closeAddTaskModal, 400);
   } catch (err) {
@@ -1800,10 +2147,37 @@ async function logActivity(action, details){
 }
 
 async function loadActivity(){
-  if (!sbClient) { renderActivity(); return; }
+  if (!sbClient) { populateActivityFilters(); renderActivity(); return; }
   const { data, error } = await sbClient.from("activity_log").select("*").order("created_at", { ascending: false }).limit(200);
   if (!error && data) currentActivity = data;
+  populateActivityFilters();
   renderActivity();
+}
+
+function wireActivityFilters(){
+  ["activity-search","activity-filter-user","activity-filter-action","activity-filter-period"].forEach(id => {
+    const control = document.getElementById(id);
+    control.addEventListener("input", renderActivity);
+    control.addEventListener("change", renderActivity);
+  });
+}
+
+function populateActivityFilters(){
+  const userFilter = document.getElementById("activity-filter-user");
+  const actionFilter = document.getElementById("activity-filter-action");
+  if (!userFilter || !actionFilter) return;
+
+  const selectedUser = userFilter.value;
+  const selectedAction = actionFilter.value;
+  const users = [...new Set(currentActivity.map(activity => activity.actor_email || "Someone"))].sort((a, b) => a.localeCompare(b));
+  const actions = [...new Set(currentActivity.map(activity => activity.action).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+  userFilter.innerHTML = `<option value="">All users</option>`;
+  users.forEach(user => userFilter.appendChild(new Option(user, user)));
+  actionFilter.innerHTML = `<option value="">All actions</option>`;
+  actions.forEach(action => actionFilter.appendChild(new Option(action, action)));
+  userFilter.value = users.includes(selectedUser) ? selectedUser : "";
+  actionFilter.value = actions.includes(selectedAction) ? selectedAction : "";
 }
 
 function relativeTime(isoString){
@@ -1832,9 +2206,32 @@ function activityDateLabel(isoString){
 function renderActivity(){
   const list = document.getElementById("activity-list");
   list.innerHTML = "";
-  document.getElementById("activity-empty-state").classList.toggle("is-hidden", currentActivity.length !== 0);
+  const emptyState = document.getElementById("activity-empty-state");
+  const search = document.getElementById("activity-search").value.trim().toLowerCase();
+  const userFilter = document.getElementById("activity-filter-user").value;
+  const actionFilter = document.getElementById("activity-filter-action").value;
+  const periodFilter = document.getElementById("activity-filter-period").value;
+  const now = Date.now();
+  const filteredActivities = currentActivity.filter(activity => {
+    const actor = activity.actor_email || "Someone";
+    if (userFilter && actor !== userFilter) return false;
+    if (actionFilter && activity.action !== actionFilter) return false;
+    if (search && !`${actor} ${activity.action || ""} ${activity.details || ""}`.toLowerCase().includes(search)) return false;
+    if (periodFilter) {
+      const createdAt = new Date(activity.created_at).getTime();
+      if (!Number.isFinite(createdAt)) return false;
+      const ageInDays = (now - createdAt) / 86400000;
+      if (periodFilter === "older" ? ageInDays <= 90 : ageInDays > Number(periodFilter)) return false;
+    }
+    return true;
+  });
+  emptyState.textContent = currentActivity.length ? "No activity matches these filters." : "No activity recorded yet.";
+  emptyState.classList.toggle("is-hidden", filteredActivities.length !== 0);
+  const summary = document.getElementById("activity-filter-summary");
+  summary.textContent = `Showing ${filteredActivities.length} of ${currentActivity.length} activities`;
+  summary.classList.toggle("is-hidden", currentActivity.length === 0);
   const canManageActivities = !!currentUser && isAdminEmail(currentUser.email);
-  const dates = currentActivity.reduce((grouped, activity) => {
+  const dates = filteredActivities.reduce((grouped, activity) => {
     const dateKey = activityDateKey(activity.created_at);
     if (!grouped[dateKey]) grouped[dateKey] = { label: activityDateLabel(activity.created_at), activities: [] };
     grouped[dateKey].activities.push(activity);
