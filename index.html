@@ -138,7 +138,7 @@
         <button class="btn repository-add-btn" id="open-add-entry">+ Add source</button>
       </header>
 
-      <div class="filter-bar">
+      <div class="filter-bar repository-filters">
         <div class="filter-search-wrap">
           <svg class="filter-search-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="10.8" cy="10.8" r="6.3" /><path d="m15.5 15.5 4.2 4.2" /></svg>
           <input type="search" id="filter-search" placeholder="Search source, author, notes…" />
@@ -167,9 +167,20 @@
           <div class="filter-dropdown-menu is-hidden" id="filter-type-menu" role="listbox" aria-label="Filter by source type"></div>
           <select id="filter-type" class="is-hidden" aria-hidden="true" tabindex="-1"><option value="">All source types</option></select>
         </div>
+        <select id="filter-date" aria-label="Filter by collection date">
+          <option value="">Any collection date</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="older">Older than 90 days</option>
+        </select>
       </div>
 
-      <div class="card-grid" id="card-grid"></div>
+      <div class="repository-results-bar">
+        <p class="repository-filter-summary is-hidden" id="repository-filter-summary" aria-live="polite"></p>
+        <button type="button" class="btn btn-ghost btn-small repository-view-toggle" id="repository-view-toggle" aria-pressed="false">Group by date &amp; type</button>
+      </div>
+      <div class="repository-groups" id="card-grid"></div>
       <p class="empty-state is-hidden" id="empty-state">No entries match yet. Add your first source, or clear your filters.</p>
     </section>
 
@@ -310,6 +321,37 @@
   </main>
 </div>
 
+<div class="workspace-gate is-hidden" id="workspace-gate" role="dialog" aria-modal="true" aria-labelledby="workspace-gate-title">
+  <section class="workspace-gate-panel">
+    <p class="eyebrow">Member access</p>
+    <h2 id="workspace-gate-title">Complete your profile</h2>
+    <p id="workspace-gate-message">Add your name and a short bio before continuing.</p>
+    <div class="workspace-gate-actions">
+      <button type="button" class="btn btn-primary" id="workspace-gate-profile">Complete profile</button>
+      <button type="button" class="btn btn-ghost" id="workspace-gate-signout">Sign out</button>
+    </div>
+  </section>
+</div>
+
+<div class="site-guide" id="site-guide">
+  <section class="site-guide-panel is-hidden" id="site-guide-panel" aria-label="Hub Guide" aria-hidden="true">
+    <header class="site-guide-header">
+      <div><strong>Hub Guide</strong><span>Navigation and how-to help</span></div>
+      <button type="button" class="site-guide-close" id="site-guide-close" aria-label="Close Hub Guide">&times;</button>
+    </header>
+    <div class="site-guide-messages" id="site-guide-messages" role="log" aria-live="polite">
+      <p class="site-guide-message is-assistant">Hi there. What are you trying to find?</p>
+      <p class="site-guide-scope">I can help you navigate the hub. Source research and uploads stay in your hands.</p>
+    </div>
+    <form class="site-guide-form" id="site-guide-form">
+      <textarea id="site-guide-input" rows="1" maxlength="600" aria-label="Ask Hub Guide" placeholder="Ask about a page or feature…" required></textarea>
+      <button type="submit" class="btn btn-primary btn-small" aria-label="Send question">Send</button>
+    </form>
+    <p class="site-guide-status" id="site-guide-status" aria-live="polite"></p>
+  </section>
+  <button type="button" class="site-guide-toggle" id="site-guide-toggle" aria-expanded="false" aria-controls="site-guide-panel" title="Open Hub Guide">Hub Guide</button>
+</div>
+
 <!-- ADD ENTRY MODAL -->
 <div class="modal-overlay is-hidden" id="modal-overlay">
   <div class="modal">
@@ -371,7 +413,7 @@
 
 <!-- DETAIL / VIEW MODAL -->
 <div class="modal-overlay is-hidden" id="detail-overlay">
-  <div class="modal" id="detail-modal"></div>
+  <div class="modal detail-modal" id="detail-modal"></div>
 </div>
 
 <!-- ADD MEMBER MODAL -->
@@ -385,8 +427,8 @@
       <label>Name
         <input type="text" id="m-name" placeholder="e.g. Thandi M." required />
       </label>
-      <label>Short bio (optional — role on the team, focus area, etc.)
-        <textarea id="m-bio" rows="2" placeholder="e.g. Leads KIN2 research, background in market analysis"></textarea>
+      <label>Short bio (role on the team or research focus)
+        <textarea id="m-bio" rows="2" placeholder="e.g. Leads KIN2 research, background in market analysis" required></textarea>
       </label>
       <label>Profile picture (optional — you can also add this later by clicking your avatar)
         <input type="file" id="m-avatar" accept="image/*" />
@@ -429,10 +471,24 @@
 
       <div class="field-row">
         <label>Related KIN (optional)
-          <select id="t-kin"><option value="">—</option></select>
+          <div class="filter-dropdown task-related-dropdown" id="t-kin-control">
+            <button type="button" class="filter-dropdown-trigger" id="t-kin-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="t-kin-menu">
+              <span class="filter-dropdown-value" id="t-kin-current">—</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m7 10 5 5 5-5" /></svg>
+            </button>
+            <div class="filter-dropdown-menu is-hidden" id="t-kin-menu" role="listbox" aria-label="Related KIN options"></div>
+            <select id="t-kin" class="is-hidden" aria-hidden="true" tabindex="-1"><option value="">—</option></select>
+          </div>
         </label>
         <label>Related KIQ (optional)
-          <select id="t-kiq"><option value="">—</option></select>
+          <div class="filter-dropdown task-related-dropdown" id="t-kiq-control">
+            <button type="button" class="filter-dropdown-trigger" id="t-kiq-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="t-kiq-menu">
+              <span class="filter-dropdown-value" id="t-kiq-current">—</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="m7 10 5 5 5-5" /></svg>
+            </button>
+            <div class="filter-dropdown-menu is-hidden" id="t-kiq-menu" role="listbox" aria-label="Related KIQ options"></div>
+            <select id="t-kiq" class="is-hidden" aria-hidden="true" tabindex="-1"><option value="">—</option></select>
+          </div>
         </label>
       </div>
 
@@ -465,6 +521,8 @@
       <h2 id="auth-modal-title">Sign in</h2>
       <button class="modal-close" id="close-auth">&times;</button>
     </div>
+    <button type="button" class="btn btn-google" id="google-sign-in"><span class="google-mark" aria-hidden="true">G</span>Continue with Google</button>
+    <p class="auth-divider">or use email</p>
     <form id="auth-form">
       <label>Email
         <input type="email" id="auth-email" required />

@@ -13,11 +13,16 @@ Deno.serve(async request => {
     const userClient = createClient(url, requiredEnv("SUPABASE_ANON_KEY"), { global: { headers: { Authorization: authorization } } });
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) return jsonResponse({ error: "Sign in is required" }, 401);
+    const { data: isAdmin, error: approvalError } = await userClient.rpc("is_admin");
+    if (approvalError) throw approvalError;
 
     const admin = createClient(url, serviceKey);
-    const { data: member, error: memberError } = await admin.from("members").select("id").eq("user_id", user.id).maybeSingle();
+    const { data: member, error: memberError } = await admin.from("members").select("id,approved,profile_completed,name,bio").eq("user_id", user.id).maybeSingle();
     if (memberError) throw memberError;
     if (!member) return jsonResponse({ error: "Team profile not found" }, 404);
+    if (!isAdmin && (!member.approved || !member.profile_completed || !member.name?.trim() || !member.bio?.trim())) {
+      return jsonResponse({ error: "Complete your profile and wait for admin approval first" }, 403);
+    }
 
     const { data: link, error: linkError } = await admin.from("member_whatsapp").select("phone_e164").eq("member_id", member.id).maybeSingle();
     if (linkError) throw linkError;

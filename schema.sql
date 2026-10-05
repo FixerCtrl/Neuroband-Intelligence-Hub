@@ -14,6 +14,9 @@ create table if not exists entries (
   kiq text not null,
   source text not null,
   author text not null,
+  added_by text,
+  added_by_email text,
+  added_by_user_id uuid references auth.users(id) on delete set null,
   source_type text not null,
   date_published date,
   date_collected date,
@@ -22,6 +25,10 @@ create table if not exists entries (
   file_name text,
   created_at timestamptz default now()
 );
+
+alter table entries add column if not exists added_by text;
+alter table entries add column if not exists added_by_email text;
+alter table entries add column if not exists added_by_user_id uuid references auth.users(id) on delete set null;
 
 -- Table: documents (Collection Plan + Manual text, editable in the UI)
 create table if not exists documents (
@@ -36,6 +43,8 @@ create table if not exists members (
   name text not null,
   avatar_path text,
   bio text,
+  approved boolean not null default true,
+  profile_completed boolean not null default false,
   user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
@@ -47,6 +56,14 @@ alter table members add column if not exists bio text;
 alter table members add column if not exists user_id uuid references auth.users(id) on delete set null;
 alter table members add column if not exists last_seen_at timestamptz;
 alter table members add column if not exists last_login_at timestamptz;
+alter table members add column if not exists approved boolean not null default true;
+alter table members add column if not exists profile_completed boolean not null default false;
+
+update members
+set profile_completed = true
+where not profile_completed
+  and nullif(trim(name), '') is not null
+  and nullif(trim(bio), '') is not null;
 
 -- Private WhatsApp linking, notification consent, and source-intake state.
 create table if not exists member_whatsapp (
@@ -107,10 +124,56 @@ create table if not exists task_comments (
 create table if not exists activity_log (
   id uuid primary key default gen_random_uuid(),
   actor_email text,
+  actor_name text,
+  actor_user_id uuid references auth.users(id) on delete set null,
   action text not null,
   details text,
   created_at timestamptz default now()
 );
+
+alter table activity_log add column if not exists actor_name text;
+alter table activity_log add column if not exists actor_user_id uuid references auth.users(id) on delete set null;
+
+update activity_log a
+set actor_name = coalesce(a.actor_name, m.name, a.actor_email),
+    actor_user_id = coalesce(a.actor_user_id, u.id)
+from auth.users u
+left join members m on m.user_id = u.id
+where lower(a.actor_email) = lower(u.email)
+  and (a.actor_name is null or a.actor_user_id is null);
+
+-- Backfill source contributors only from a matching nearby audit event.
+with candidate_matches as (
+  select
+    e.id as entry_id,
+    coalesce(m.name, a.actor_email) as added_by,
+    a.actor_email as added_by_email,
+    u.id as added_by_user_id,
+    row_number() over (
+      partition by e.id
+      order by abs(extract(epoch from (a.created_at - e.created_at))), a.created_at desc
+    ) as entry_rank,
+    row_number() over (
+      partition by a.id
+      order by abs(extract(epoch from (a.created_at - e.created_at))), e.created_at desc
+    ) as activity_rank
+  from entries e
+  join activity_log a
+    on a.action = 'added a source'
+    and a.details = e.source || ' (' || e.kin || '_' || e.kiq || ')'
+    and a.created_at between e.created_at - interval '5 minutes' and e.created_at + interval '5 minutes'
+  left join auth.users u on lower(u.email) = lower(a.actor_email)
+  left join members m on m.user_id = u.id
+  where e.added_by_email is null or e.added_by_user_id is null
+)
+update entries e
+set added_by = coalesce(e.added_by, matches.added_by),
+    added_by_email = coalesce(e.added_by_email, matches.added_by_email),
+    added_by_user_id = coalesce(e.added_by_user_id, matches.added_by_user_id)
+from candidate_matches matches
+where e.id = matches.entry_id
+  and matches.entry_rank = 1
+  and matches.activity_rank = 1;
 
 -- ------------------------------------------------------------
 -- ADMIN CHECK
@@ -118,8 +181,71 @@ create table if not exists activity_log (
 -- config.js. Everyone else remains a standard user.
 -- ------------------------------------------------------------
 create or replace function is_admin() returns boolean as $$
-  select (auth.jwt() ->> 'email') in ('fixerctrl@gmail.com', 'mlungisimash27@gmail.com');
+  select lower(coalesce(auth.jwt() ->> 'email', '')) in ('fixerctrl@gmail.com', 'mlungisimash27@gmail.com');
 $$ language sql stable;
+
+create or replace function stamp_activity_actor() returns trigger as $$
+declare
+  member_name text;
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  select name into member_name from members where user_id = auth.uid();
+  new.actor_user_id := auth.uid();
+  new.actor_email := coalesce(auth.jwt() ->> 'email', new.actor_email);
+  new.actor_name := coalesce(member_name, auth.jwt() -> 'user_metadata' ->> 'full_name', new.actor_email);
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists stamp_activity_actor on activity_log;
+create trigger stamp_activity_actor
+  before insert on activity_log
+  for each row execute function stamp_activity_actor();
+
+create or replace function is_approved_member() returns boolean as $$
+  select is_admin() or exists (
+    select 1 from members
+    where user_id = auth.uid()
+      and approved
+      and profile_completed
+      and nullif(trim(name), '') is not null
+      and nullif(trim(bio), '') is not null
+  );
+$$ language sql stable security definer set search_path = public;
+
+create or replace function enforce_member_approval() returns trigger as $$
+begin
+  if current_user not in ('postgres', 'supabase_admin', 'service_role') and not is_admin() then
+    if tg_op = 'INSERT' then
+      new.approved := false;
+      new.profile_completed := new.profile_completed
+        and nullif(trim(new.name), '') is not null
+        and nullif(trim(new.bio), '') is not null;
+    elsif new.approved is distinct from old.approved then
+      raise exception 'Only an admin can change member approval';
+    elsif new.profile_completed and (nullif(trim(new.name), '') is null or nullif(trim(new.bio), '') is null) then
+      raise exception 'A complete profile requires a name and short bio';
+    end if;
+  end if;
+  return new;
+end;
+$$ language plpgsql set search_path = public;
+
+drop trigger if exists enforce_member_approval on members;
+create trigger enforce_member_approval
+  before insert or update on members
+  for each row execute function enforce_member_approval();
+
+update members m
+set approved = true,
+    profile_completed = true
+from auth.users u
+where m.user_id = u.id
+  and lower(u.email) in ('fixerctrl@gmail.com', 'mlungisimash27@gmail.com')
+  and nullif(trim(m.name), '') is not null
+  and nullif(trim(m.bio), '') is not null;
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -266,6 +392,81 @@ create policy "Public read on activity_log" on activity_log for select using (tr
 create policy "Authenticated insert on activity_log" on activity_log for insert with check (auth.role() = 'authenticated');
 create policy "Admin update on activity_log" on activity_log for update using (is_admin()) with check (is_admin());
 create policy "Admin delete on activity_log" on activity_log for delete using (is_admin());
+
+-- ------------------------------------------------------------
+-- APPROVED MEMBER ACCESS
+-- Pending users may read and update only their own profile.
+-- Workspace data and source files require a complete, approved
+-- profile; admins always retain access for approval review.
+-- ------------------------------------------------------------
+drop policy if exists "Public read on entries" on entries;
+drop policy if exists "Authenticated insert on entries" on entries;
+drop policy if exists "Authenticated update on entries" on entries;
+create policy "Approved members read entries" on entries for select using (is_approved_member());
+create policy "Approved members insert entries" on entries for insert
+  with check (auth.role() = 'authenticated' and is_approved_member());
+create policy "Approved members update entries" on entries for update
+  using (is_approved_member()) with check (is_approved_member());
+
+drop policy if exists "Public read on documents" on documents;
+drop policy if exists "Authenticated insert on documents" on documents;
+drop policy if exists "Everyone can edit documents" on documents;
+create policy "Approved members read documents" on documents for select using (is_approved_member());
+create policy "Approved members insert documents" on documents for insert
+  with check (auth.role() = 'authenticated' and is_approved_member());
+create policy "Approved members update documents" on documents for update
+  using (is_approved_member()) with check (is_approved_member());
+
+drop policy if exists "Public read on members" on members;
+drop policy if exists "Users insert own member profile" on members;
+drop policy if exists "Users or admin update member profile" on members;
+create policy "Members read approved profiles and own pending profile" on members for select
+  using (user_id = auth.uid() or is_approved_member());
+create policy "Users insert own pending profile" on members for insert
+  with check (auth.role() = 'authenticated' and user_id = auth.uid());
+create policy "Users or admin update member profile" on members for update
+  using (user_id = auth.uid() or is_admin())
+  with check (user_id = auth.uid() or is_admin());
+
+drop policy if exists "Public read on tasks" on tasks;
+drop policy if exists "Authenticated insert on tasks" on tasks;
+drop policy if exists "Task assignee or admin update on tasks" on tasks;
+create policy "Approved members read tasks" on tasks for select using (is_approved_member());
+create policy "Approved members insert tasks" on tasks for insert
+  with check (
+    auth.role() = 'authenticated'
+    and is_approved_member()
+    and assigned_by in (select id from members where user_id = auth.uid())
+  );
+create policy "Approved task assignee or admin update" on tasks for update
+  using (
+    is_approved_member()
+    and (assigned_to in (select id from members where user_id = auth.uid()) or is_admin())
+  )
+  with check (
+    is_approved_member()
+    and (assigned_to in (select id from members where user_id = auth.uid()) or is_admin())
+  );
+
+drop policy if exists "Public read on task_comments" on task_comments;
+drop policy if exists "Authenticated insert on task_comments" on task_comments;
+create policy "Approved members read task comments" on task_comments for select using (is_approved_member());
+create policy "Approved members insert task comments" on task_comments for insert
+  with check (auth.role() = 'authenticated' and is_approved_member());
+
+drop policy if exists "Public read on sources bucket" on storage.objects;
+drop policy if exists "Authenticated upload on sources bucket" on storage.objects;
+update storage.buckets set public = false where id = 'sources';
+create policy "Approved members read source files" on storage.objects
+  for select using (bucket_id = 'sources' and is_approved_member());
+create policy "Approved members upload source files" on storage.objects
+  for insert with check (bucket_id = 'sources' and auth.role() = 'authenticated' and is_approved_member());
+
+drop policy if exists "Public read on activity_log" on activity_log;
+drop policy if exists "Authenticated insert on activity_log" on activity_log;
+create policy "Approved members read activity log" on activity_log for select using (is_approved_member());
+create policy "Authenticated users record activity" on activity_log for insert
+  with check (auth.role() = 'authenticated');
 
 -- ------------------------------------------------------------
 -- REAL-TIME SYNC

@@ -13,6 +13,13 @@ Deno.serve(async request => {
     const userClient = createClient(url, requiredEnv("SUPABASE_ANON_KEY"), { global: { headers: { Authorization: authorization } } });
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) return jsonResponse({ error: "Sign in is required" }, 401);
+    const { data: isAdmin, error: approvalError } = await userClient.rpc("is_admin");
+    if (approvalError) throw approvalError;
+    const { data: membership, error: membershipError } = await userClient.from("members").select("approved,profile_completed,bio").eq("user_id", user.id).maybeSingle();
+    if (membershipError) throw membershipError;
+    if (!isAdmin && (!membership?.approved || !membership.profile_completed || !membership.bio?.trim())) {
+      return jsonResponse({ error: "Complete your profile and wait for admin approval first" }, 403);
+    }
 
     const { task_id: taskId } = await request.json();
     if (typeof taskId !== "string" || !/^[0-9a-f-]{36}$/i.test(taskId)) return jsonResponse({ error: "Valid task_id is required" }, 400);
@@ -23,8 +30,6 @@ Deno.serve(async request => {
     if (!task) return jsonResponse({ error: "Task not found" }, 404);
     const { data: assigner, error: assignerError } = await admin.from("members").select("user_id").eq("id", task.assigned_by).maybeSingle();
     if (assignerError) throw assignerError;
-    const adminEmails = ["fixerctrl@gmail.com", "mlungisimash27@gmail.com"];
-    const isAdmin = adminEmails.includes((user.email || "").toLowerCase());
     if (!isAdmin && (!assigner || assigner.user_id !== user.id)) return jsonResponse({ error: "You cannot send a notification for this task" }, 403);
 
     const { data: contact, error: contactError } = await admin.from("member_whatsapp").select("phone_e164,opted_in_at").eq("member_id", task.assigned_to).maybeSingle();

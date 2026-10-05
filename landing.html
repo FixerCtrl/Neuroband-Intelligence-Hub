@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#e9efeb" />
+  <title>Sign in — Neuroband Intelligence Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="landing.css" />
+</head>
+<body class="landing-body">
+  <main class="access-page">
+    <section class="access-intro" aria-labelledby="access-title">
+      <a class="access-brand" href="landing.html" aria-label="Neuroband Intelligence Hub home">
+        <span>Neuroband<br />Intelligence Hub</span>
+      </a>
+      <div class="access-intro-copy">
+        <p class="eyebrow">Team research workspace</p>
+        <h1 id="access-title">Good research starts with a clear view.</h1>
+        <p>Sign in to access your team's intelligence repository, planning tools, and activity record.</p>
+      </div>
+      <p class="access-security-note"><span class="access-status-dot" aria-hidden="true"></span> Workspace access is granted after profile completion and admin approval.</p>
+    </section>
+
+    <section class="access-form-panel" aria-labelledby="access-form-title">
+      <p class="eyebrow">Member sign-in</p>
+      <h2 id="access-form-title">Welcome back</h2>
+      <p class="access-form-copy">Use your team account to continue.</p>
+
+      <button type="button" class="btn btn-google access-google-button" id="landing-google-sign-in"><span class="google-mark" aria-hidden="true">G</span>Continue with Google</button>
+      <p class="auth-divider"><span>or use email</span></p>
+
+      <form id="landing-auth-form">
+        <label for="landing-email">Email address</label>
+        <input type="email" id="landing-email" autocomplete="email" required />
+        <label for="landing-password">Password</label>
+        <input type="password" id="landing-password" autocomplete="current-password" required minlength="6" />
+        <button type="submit" class="btn btn-primary access-submit" id="landing-submit">Sign in</button>
+      </form>
+      <button type="button" class="access-mode-toggle" id="landing-mode-toggle">Need an account? Sign up</button>
+      <p class="form-status access-status" id="landing-status" aria-live="polite"></p>
+    </section>
+
+    <footer class="access-footer">Neuroband Intelligence Hub <span>·</span> Team access</footer>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="landing.js"></script>
+</body>
+</html>

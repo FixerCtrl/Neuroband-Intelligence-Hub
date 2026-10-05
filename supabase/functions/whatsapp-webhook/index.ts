@@ -43,6 +43,15 @@ async function linkPhone(admin: ReturnType<typeof createClient>, phone: string, 
     await sendWhatsAppText(phone, "That connection code is invalid or expired. Generate a new code from your Team profile and try again.");
     return;
   }
+  const { data: member, error: memberError } = await admin.from("members")
+    .select("approved,profile_completed,name,bio")
+    .eq("id", link.member_id)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  if (!member?.approved || !member.profile_completed || !member.name?.trim() || !member.bio?.trim()) {
+    await sendWhatsAppText(phone, "This team profile is not approved for workspace access yet. Please complete your profile and contact an admin.");
+    return;
+  }
   const now = new Date().toISOString();
   const { error: updateError } = await admin.from("member_whatsapp").update({
     phone_e164: phone,
@@ -114,6 +123,17 @@ async function handleIntakeText(admin: ReturnType<typeof createClient>, phone: s
   if (error) throw error;
   if (!session || session.member_id !== memberId) {
     await sendWhatsAppText(phone, "To add a source, send a PDF or image first. I’ll ask for its KIN, KIQ, source, author, type, publication date, and relevance.");
+    return;
+  }
+  const { data: member, error: memberError } = await admin.from("members")
+    .select("name,user_id,approved,profile_completed,bio")
+    .eq("id", memberId)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  if (!member?.approved || !member.profile_completed || !member.name?.trim() || !member.bio?.trim()) {
+    if (session.file_path) await admin.storage.from("sources").remove([session.file_path]);
+    await admin.from("whatsapp_intake_sessions").delete().eq("phone_e164", phone);
+    await sendWhatsAppText(phone, "Workspace access for this profile is pending. Contact an admin before submitting sources.");
     return;
   }
 
@@ -190,11 +210,19 @@ async function handleIntakeText(admin: ReturnType<typeof createClient>, phone: s
       return;
     }
     const fileName = `NEUROBAND_${payload.kin}_${payload.kiq}_${payload.source_type.replace(/[^a-zA-Z0-9]+/g, "")}_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}_${session.file_name}`;
+    let actorEmail: string | null = null;
+    if (member.user_id) {
+      const { data: authRecord } = await admin.auth.admin.getUserById(member.user_id);
+      actorEmail = authRecord?.user?.email || null;
+    }
     const record = {
       kin: payload.kin,
       kiq: payload.kiq,
       source: payload.source,
       author: payload.author,
+      added_by: member.name,
+      added_by_email: actorEmail,
+      added_by_user_id: member.user_id,
       source_type: payload.source_type,
       date_published: payload.date_published || null,
       date_collected: new Date().toISOString().slice(0, 10),
@@ -205,14 +233,10 @@ async function handleIntakeText(admin: ReturnType<typeof createClient>, phone: s
     };
     const { error: insertError } = await admin.from("entries").insert(record);
     if (insertError) throw insertError;
-    const { data: member } = await admin.from("members").select("user_id").eq("id", memberId).maybeSingle();
-    let actorEmail = null;
-    if (member?.user_id) {
-      const { data: authRecord } = await admin.auth.admin.getUserById(member.user_id);
-      actorEmail = authRecord?.user?.email || null;
-    }
     const { error: activityError } = await admin.from("activity_log").insert({
       actor_email: actorEmail,
+      actor_name: member.name,
+      actor_user_id: member.user_id,
       action: "added a source via WhatsApp",
       details: `${record.source} (${record.kin}_${record.kiq})`,
       created_at: new Date().toISOString(),
@@ -252,6 +276,19 @@ async function processMessage(admin: ReturnType<typeof createClient>, message: R
     if (session?.file_path) await admin.storage.from("sources").remove([session.file_path]);
     await admin.from("whatsapp_intake_sessions").delete().eq("phone_e164", phone);
     await sendWhatsAppText(phone, "Source intake cancelled. Send a PDF or image whenever you’re ready to start again.");
+    return;
+  }
+
+  const { data: member, error: memberError } = await admin.from("members")
+    .select("approved,profile_completed,bio")
+    .eq("id", link.member_id)
+    .maybeSingle();
+  if (memberError) throw memberError;
+  if (!member?.approved || !member.profile_completed || !member.bio?.trim()) {
+    const { data: session } = await admin.from("whatsapp_intake_sessions").select("file_path").eq("phone_e164", phone).maybeSingle();
+    if (session?.file_path) await admin.storage.from("sources").remove([session.file_path]);
+    await admin.from("whatsapp_intake_sessions").delete().eq("phone_e164", phone);
+    await sendWhatsAppText(phone, "Workspace access for this profile is pending. Contact an admin before submitting sources.");
     return;
   }
 

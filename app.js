@@ -67,6 +67,7 @@ Edit this page when the process changes. Changes are saved after selecting Save 
 let sbClient = null;
 let currentEntries = [];
 let currentMembers = [];
+let memberLoadError = null;
 let currentTasks = [];
 let currentTaskComments = [];
 let taskCommentsUnavailable = false;
@@ -99,6 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireTaskModal();
   wireTaskViews();
   wireAuthModal();
+  wireSiteGuide();
   wireNotifications();
   wireWhatsAppSettings();
   wireActivityFilters();
@@ -129,15 +131,81 @@ function canFinalSay(){
   return canManageLeadership();
 }
 
+function isMemberProfileComplete(member = myMemberProfile()){
+  return !!member && !!member.name?.trim() && !!member.bio?.trim();
+}
+
+function canAccessWorkspace(){
+  const member = myMemberProfile();
+  return !!currentUser && !memberLoadError && isMemberProfileComplete(member) && (canManageLeadership() || member.approved === true);
+}
+
+function updateWorkspaceGate(){
+  const gate = document.getElementById("workspace-gate");
+  if (!gate) return;
+  const member = myMemberProfile();
+  const profileComplete = isMemberProfileComplete(member);
+  const hasAccess = !!currentUser && !memberLoadError && profileComplete && (canManageLeadership() || member.approved === true);
+  const blocked = !!currentUser && !hasAccess;
+  const profileModal = document.getElementById("member-modal-overlay");
+  const editingOwnProfile = !!profileModal && !profileModal.classList.contains("is-hidden") && !memberEditorTargetId;
+  gate.classList.toggle("is-hidden", !blocked || editingOwnProfile);
+  document.querySelector(".shell")?.toggleAttribute("inert", blocked && !editingOwnProfile);
+  if (!currentUser || hasAccess || editingOwnProfile) return;
+
+  const title = document.getElementById("workspace-gate-title");
+  const message = document.getElementById("workspace-gate-message");
+  const profileButton = document.getElementById("workspace-gate-profile");
+  if (memberLoadError) {
+    title.textContent = "Profile setup needs an update";
+    message.textContent = "The member profile status could not be loaded. Ask an admin to run the latest schema.sql, then retry.";
+    profileButton.textContent = "Retry profile check";
+  } else if (!profileComplete) {
+    title.textContent = "Complete your profile";
+    message.textContent = "Add your name and a short bio before continuing. Profile photos are optional.";
+    profileButton.textContent = "Complete profile";
+  } else {
+    title.textContent = "Awaiting admin approval";
+    message.textContent = "Your profile is complete. An admin must approve your account before you can access the workspace.";
+    profileButton.textContent = "Edit profile";
+  }
+}
+
+async function loadApprovedWorkspace(){
+  updateWorkspaceGate();
+  if (!canAccessWorkspace()) {
+    currentEntries = [];
+    currentTasks = [];
+    currentTaskComments = [];
+    currentActivity = [];
+    renderOverview();
+    renderAnalysis();
+    renderEntries();
+    renderTasks();
+    renderActivity();
+    return;
+  }
+  await Promise.all([
+    loadDocument("collection_plan"),
+    loadDocument("manual"),
+    loadEntries(),
+    loadTasks(),
+    loadActivity(),
+  ]);
+}
+
 async function initAuth(){
   if (!sbClient) { renderAuthBox(); return; }
 
   const { data: { session } } = await sbClient.auth.getSession();
   currentUser = session ? session.user : null;
-  if (currentUser) {
-    await ensureMyProfile();
-    await loadMembers();
+  if (!currentUser) {
+    window.location.replace("landing.html");
+    return;
   }
+  await ensureMyProfile();
+  await loadMembers();
+  await loadApprovedWorkspace();
   renderAuthBox();
 
   sbClient.auth.onAuthStateChange(async (event, session) => {
@@ -145,9 +213,15 @@ async function initAuth(){
     if (currentUser) {
       await ensureMyProfile(event === "SIGNED_IN");
       await loadMembers();
+    } else {
+      currentMembers = [];
+      refreshIdentityUI();
+      await loadApprovedWorkspace();
+      window.location.replace("landing.html");
+      return;
     }
     refreshIdentityUI();
-    renderEntries();
+    await loadApprovedWorkspace();
   });
 }
 
@@ -157,8 +231,11 @@ async function initAuth(){
 function refreshIdentityUI(){
   renderAuthBox();
   renderMembers();   // re-show/hide admin-only controls and refresh the profile card
+  renderEntries();
+  renderActivity();
   renderTasks();
   renderNotifications();
+  updateWorkspaceGate();
   loadWhatsAppSettings();
 }
 
@@ -225,6 +302,7 @@ function wireWhatsAppSettings(){
       link.href = `https://wa.me/${number}?text=${encodeURIComponent(phrase)}`;
       link.classList.remove("is-hidden");
       safeId("whatsapp-settings-status").textContent = "Finish linking from your WhatsApp account:";
+      await logActivity("started WhatsApp linking");
       if (whatsappLinkPoll) clearInterval(whatsappLinkPoll);
       const expiresAt = Date.now() + 10 * 60 * 1000;
       whatsappLinkPoll = setInterval(async () => {
@@ -254,6 +332,7 @@ function wireWhatsAppSettings(){
       safeId("whatsapp-link-instructions").classList.add("is-hidden");
       safeId("whatsapp-open-link").classList.add("is-hidden");
       await loadWhatsAppSettings();
+      await logActivity("disconnected WhatsApp");
     } catch (error) {
       console.error("Could not disconnect WhatsApp:", error);
       safeId("whatsapp-settings-status").textContent = "Could not disconnect WhatsApp. Please try again.";
@@ -421,24 +500,63 @@ function isImportantActivityForMember(activity, mine){
 // Returns true if the user may proceed; otherwise opens the
 // sign-in modal and returns false.
 function requireAuth(){
-  if (currentUser) return true;
-  openAuthModal();
-  return false;
+  if (!currentUser) {
+    openAuthModal();
+    return false;
+  }
+  if (!canAccessWorkspace()) {
+    updateWorkspaceGate();
+    return false;
+  }
+  return true;
 }
 
 let authMode = "signin"; // or "signup"
 
 function wireAuthModal(){
   document.getElementById("open-auth")?.addEventListener("click", openAuthModal);
+  document.getElementById("google-sign-in").addEventListener("click", signInWithGoogle);
   document.getElementById("close-auth").addEventListener("click", closeAuthModal);
   document.getElementById("auth-modal-overlay").addEventListener("click", (e) => {
     if (e.target.id === "auth-modal-overlay") closeAuthModal();
+  });
+  document.getElementById("workspace-gate-profile").addEventListener("click", async () => {
+    if (memberLoadError) {
+      await loadMembers();
+      await loadApprovedWorkspace();
+      return;
+    }
+    document.getElementById("workspace-gate").classList.add("is-hidden");
+    activateTab("team");
+    openOwnProfileEditor();
+  });
+  document.getElementById("workspace-gate-signout").addEventListener("click", async () => {
+    if (sbClient) await sbClient.auth.signOut();
   });
   document.getElementById("auth-toggle-mode").addEventListener("click", () => {
     authMode = authMode === "signin" ? "signup" : "signin";
     updateAuthModalMode();
   });
   document.getElementById("auth-form").addEventListener("submit", submitAuth);
+}
+
+async function signInWithGoogle(){
+  const status = document.getElementById("auth-form-status");
+  if (!sbClient) {
+    status.textContent = "Not connected to Supabase yet.";
+    status.className = "form-status is-error";
+    return;
+  }
+  status.textContent = "Redirecting to Google…";
+  status.className = "form-status";
+  const { error } = await sbClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
+  });
+  if (error) {
+    status.textContent = error.message || "Could not start Google sign-in.";
+    status.className = "form-status is-error";
+  }
 }
 
 function updateAuthModalMode(){
@@ -496,6 +614,82 @@ async function submitAuth(e){
     console.error(err);
     status.textContent = err.message || "Something went wrong.";
     status.className = "form-status is-error";
+  }
+}
+
+let siteGuideMessages = [];
+
+function wireSiteGuide(){
+  const toggle = document.getElementById("site-guide-toggle");
+  const panel = document.getElementById("site-guide-panel");
+  const close = document.getElementById("site-guide-close");
+  const form = document.getElementById("site-guide-form");
+  toggle.addEventListener("click", () => {
+    if (!requireAuth()) return;
+    const opening = panel.classList.contains("is-hidden");
+    panel.classList.toggle("is-hidden", !opening);
+    panel.setAttribute("aria-hidden", String(!opening));
+    toggle.setAttribute("aria-expanded", String(opening));
+    if (opening) document.getElementById("site-guide-input").focus();
+  });
+  close.addEventListener("click", () => {
+    panel.classList.add("is-hidden");
+    panel.setAttribute("aria-hidden", "true");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.focus();
+  });
+  form.addEventListener("submit", sendSiteGuideMessage);
+}
+
+function appendSiteGuideMessage(role, content){
+  const messages = document.getElementById("site-guide-messages");
+  const message = document.createElement("p");
+  message.className = `site-guide-message is-${role}`;
+  message.textContent = content;
+  messages.appendChild(message);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+async function sendSiteGuideMessage(event){
+  event.preventDefault();
+  if (!requireAuth()) return;
+  const input = document.getElementById("site-guide-input");
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  const status = document.getElementById("site-guide-status");
+  const question = input.value.trim();
+  if (!question) return;
+
+  input.value = "";
+  button.disabled = true;
+  status.textContent = "Thinking…";
+  siteGuideMessages.push({ role: "user", content: question });
+  siteGuideMessages = siteGuideMessages.slice(-8);
+  appendSiteGuideMessage("user", question);
+
+  try {
+    const { data, error } = await sbClient.functions.invoke("site-guide", { body: { messages: siteGuideMessages } });
+    if (error) {
+      let detail = error.message || "The guide is unavailable right now.";
+      if (error.context && typeof error.context.clone === "function") {
+        const responseBody = await error.context.clone().json().catch(() => null);
+        detail = responseBody?.error || detail;
+      }
+      throw new Error(detail);
+    }
+    if (data?.error) throw new Error(data.error);
+    const reply = data?.reply || "I couldn’t form a helpful answer. Try asking about a specific page or feature.";
+    siteGuideMessages.push({ role: "assistant", content: reply });
+    siteGuideMessages = siteGuideMessages.slice(-8);
+    appendSiteGuideMessage("assistant", reply);
+    status.textContent = "";
+  } catch (error) {
+    const errorMessage = error.message || "";
+    status.textContent = /failed to send a request to the edge function|failed to fetch|networkerror/i.test(errorMessage)
+      ? "Hub Guide is not reachable yet. Ask an admin to deploy the site-guide Edge Function and configure its OPENAI_API_KEY, then refresh."
+      : errorMessage || "The guide is unavailable right now.";
+  } finally {
+    button.disabled = false;
+    input.focus();
   }
 }
 
@@ -863,13 +1057,19 @@ async function saveDocument(slug){
   const editor = document.getElementById("edit-" + slug);
   const cleanHtml = sanitizeDocumentHtml(editor.innerHTML);
   const newContent = RICH_DOCUMENT_PREFIX + cleanHtml;
+  if (!sbClient) return;
+  const { error } = await sbClient.from("documents").upsert({ slug, content: newContent, updated_at: new Date().toISOString() });
+  if (error) {
+    console.error("Document save failed:", error);
+    alert("Could not save changes: " + error.message);
+    return;
+  }
   document.getElementById("view-" + slug).innerHTML = cleanHtml;
   document.getElementById("view-" + slug).dataset.raw = newContent;
   toggleEdit(slug, false);
-  if (sbClient) {
-    await sbClient.from("documents").upsert({ slug, content: newContent, updated_at: new Date().toISOString() });
-    logActivity("updated the " + (slug === "manual" ? "Manual" : "Collection Plan"));
-  }
+  const activitySaved = await logActivity("updated the " + (slug === "manual" ? "Manual" : "Collection Plan"));
+  await loadActivity();
+  if (!activitySaved) console.error("Document saved, but its Activity record could not be saved.");
 }
 
 // ---------- REPOSITORY: dropdowns ----------
@@ -917,15 +1117,18 @@ function wireFilterDropdown(select, idPrefix){
   const menu = document.getElementById(`${idPrefix}-menu`);
   if (!control || !trigger || !current || !menu) return;
 
-  menu.innerHTML = [...select.options].map(option => {
-    const filterId = option.dataset.filterId;
-    const label = option.dataset.filterLabel;
-    return `
-      <button type="button" class="filter-dropdown-option" role="option" aria-selected="${option.value === select.value}" tabindex="-1" data-value="${escapeHtml(option.value)}">
-        ${filterId ? `<strong>${escapeHtml(filterId)}</strong><span>${escapeHtml(label)}</span>` : `<span>${escapeHtml(option.textContent)}</span>`}
-      </button>
-    `;
-  }).join("");
+  function renderOptions(){
+    menu.innerHTML = [...select.options].map(option => {
+      const filterId = option.dataset.filterId;
+      const label = option.dataset.filterLabel;
+      return `
+        <button type="button" class="filter-dropdown-option" role="option" aria-selected="${option.value === select.value}" tabindex="-1" data-value="${escapeHtml(option.value)}">
+          ${filterId ? `<strong>${escapeHtml(filterId)}</strong><span>${escapeHtml(label)}</span>` : `<span>${escapeHtml(option.textContent)}</span>`}
+        </button>
+      `;
+    }).join("");
+  }
+  renderOptions();
 
   function updateCurrent(){
     const option = select.options[select.selectedIndex];
@@ -982,6 +1185,10 @@ function wireFilterDropdown(select, idPrefix){
   document.addEventListener("click", event => {
     if (!control.contains(event.target)) setMenuOpen(false);
   });
+  return () => {
+    renderOptions();
+    updateCurrent();
+  };
 }
 
 function updateKiqOptions(kinId, selectEl){
@@ -1013,9 +1220,16 @@ function updateFilenamePreview(){
 
 // ---------- REPOSITORY: filters ----------
 function wireFilters(){
-  ["filter-search","filter-kin","filter-kiq","filter-type"].forEach(id => {
+  ["filter-search","filter-kin","filter-kiq","filter-type","filter-date"].forEach(id => {
     document.getElementById(id).addEventListener("input", renderEntries);
     document.getElementById(id).addEventListener("change", renderEntries);
+  });
+  const viewToggle = document.getElementById("repository-view-toggle");
+  viewToggle.addEventListener("click", () => {
+    const grouped = viewToggle.getAttribute("aria-pressed") !== "true";
+    viewToggle.setAttribute("aria-pressed", String(grouped));
+    viewToggle.textContent = grouped ? "Show flat list" : "Group by date & type";
+    renderEntries();
   });
 }
 
@@ -1035,13 +1249,24 @@ function renderEntries(){
   const kin = document.getElementById("filter-kin").value;
   const kiq = document.getElementById("filter-kiq").value;
   const type = document.getElementById("filter-type").value;
+  const collectionPeriod = document.getElementById("filter-date").value;
 
   const filtered = currentEntries.filter(e => {
     if (kin && e.kin !== kin) return false;
     if (kiq && e.kiq !== kiq) return false;
     if (type && e.source_type !== type) return false;
+    const collectionDate = repositoryCollectionDateKey(e.date_collected);
+    if (collectionPeriod) {
+      if (!collectionDate) return false;
+      const [year, month, day] = collectionDate.split("-").map(Number);
+      const collectedDay = Date.UTC(year, month - 1, day);
+      const today = new Date();
+      const todayUtcDay = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+      const ageInDays = (todayUtcDay - collectedDay) / 86400000;
+      if (collectionPeriod === "older" ? ageInDays <= 90 : ageInDays < 0 || ageInDays > Number(collectionPeriod)) return false;
+    }
     if (search) {
-      const hay = `${e.source} ${e.author} ${e.relevance}`.toLowerCase();
+      const hay = `${e.source} ${e.author} ${e.added_by || ""} ${e.added_by_email || ""} ${e.relevance}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -1050,8 +1275,12 @@ function renderEntries(){
   const grid = document.getElementById("card-grid");
   grid.innerHTML = "";
   document.getElementById("empty-state").classList.toggle("is-hidden", filtered.length !== 0);
+  const summary = document.getElementById("repository-filter-summary");
+  summary.textContent = `Showing ${filtered.length} of ${currentEntries.length} sources`;
+  summary.classList.toggle("is-hidden", currentEntries.length === 0);
+  const groupedView = document.getElementById("repository-view-toggle").getAttribute("aria-pressed") === "true";
 
-  filtered.forEach(e => {
+  function createEntryCard(e){
     const card = document.createElement("div");
     card.className = "entry-card";
     card.innerHTML = `
@@ -1061,12 +1290,57 @@ function renderEntries(){
       </div>
       <p class="entry-source">${escapeHtml(e.source)}</p>
       <div class="entry-meta">${escapeHtml(e.author)} · ${e.date_published || "—"} · ${escapeHtml(e.source_type)}</div>
+      ${entryContributorMarkup(e)}
       <div class="entry-relevance">${escapeHtml(truncate(e.relevance, 110))}</div>
       ${canManageLeadership() ? `<div class="entry-actions"><button class="btn btn-danger-ghost btn-small entry-delete" data-entry-id="${e.id}">Delete entry</button></div>` : ""}
     `;
     card.addEventListener("click", () => openDetail(e));
-    grid.appendChild(card);
-  });
+    return card;
+  }
+
+  if (groupedView) {
+    const dateGroups = new Map();
+    filtered.forEach(entry => {
+      const dateKey = repositoryCollectionDateKey(entry.date_collected);
+      if (!dateGroups.has(dateKey)) dateGroups.set(dateKey, []);
+      dateGroups.get(dateKey).push(entry);
+    });
+    const sortedDateGroups = [...dateGroups.entries()].sort(([a], [b]) => {
+      if (!a) return 1;
+      if (!b) return -1;
+      return b.localeCompare(a);
+    });
+
+    sortedDateGroups.forEach(([dateKey, entries]) => {
+      const dateSection = document.createElement("section");
+      dateSection.className = "repository-date-group";
+      dateSection.innerHTML = `<header class="repository-date-heading"><h2>${escapeHtml(repositoryDateLabel(dateKey))}</h2><span>${entries.length} ${entries.length === 1 ? "source" : "sources"}</span></header>`;
+
+      const typeGroups = new Map();
+      entries.forEach(entry => {
+        const sourceType = entry.source_type || "Uncategorized";
+        if (!typeGroups.has(sourceType)) typeGroups.set(sourceType, []);
+        typeGroups.get(sourceType).push(entry);
+      });
+
+      [...typeGroups.entries()].sort(([a], [b]) => a.localeCompare(b)).forEach(([sourceType, typeEntries]) => {
+        const typeSection = document.createElement("section");
+        typeSection.className = "repository-type-group";
+        typeSection.innerHTML = `<h3 class="repository-type-heading"><span>${escapeHtml(sourceType)}</span><span>${typeEntries.length}</span></h3>`;
+        const sourceGrid = document.createElement("div");
+        sourceGrid.className = "card-grid repository-source-grid";
+        typeEntries.forEach(entry => sourceGrid.appendChild(createEntryCard(entry)));
+        typeSection.appendChild(sourceGrid);
+        dateSection.appendChild(typeSection);
+      });
+      grid.appendChild(dateSection);
+    });
+  } else {
+    const sourceGrid = document.createElement("div");
+    sourceGrid.className = "card-grid";
+    filtered.forEach(entry => sourceGrid.appendChild(createEntryCard(entry)));
+    grid.appendChild(sourceGrid);
+  }
 
   grid.querySelectorAll(".entry-delete").forEach(button => {
     button.addEventListener("click", async event => {
@@ -1080,18 +1354,53 @@ function renderEntries(){
         return;
       }
       if (entry.file_path) await sbClient.storage.from("sources").remove([entry.file_path]);
-      logActivity("deleted a repository entry", entry.source);
+      await logActivity("deleted a repository entry", entry.source);
       await loadEntries();
+      await loadActivity();
     });
   });
+}
+
+function repositoryCollectionDateKey(value){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? value : "";
+}
+
+function repositoryDateLabel(dateKey){
+  if (!dateKey) return "Collection date not recorded";
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" }).format(new Date(year, month - 1, day));
+}
+
+function entryContributorMarkup(entry){
+  const profile = currentMembers.find(member => member.user_id === entry.added_by_user_id);
+  const name = profile?.name || entry.added_by || entry.added_by_email || "Not recorded";
+  const email = entry.added_by_email || "Email not recorded";
+  const avatarUrl = profile?.avatar_path ? getPublicAvatarUrl(profile.avatar_path) : null;
+  const avatar = avatarUrl
+    ? `<img src="${escapeHtml(avatarUrl)}" alt="" />`
+    : escapeHtml(entry.added_by || entry.added_by_email ? initials(name) : "?");
+  return `<div class="entry-contributor"><span class="entry-contributor-avatar">${avatar}</span><span class="entry-contributor-copy"><span class="entry-contributor-name"><span>Added by</span><strong>${escapeHtml(name)}</strong></span><span class="entry-contributor-email">${escapeHtml(email)}</span></span></div>`;
 }
 
 function truncate(str, n){ return str && str.length > n ? str.slice(0, n) + "…" : (str || ""); }
 
 // ---------- DETAIL MODAL ----------
-function openDetail(entry){
+async function openDetail(entry){
   const modal = document.getElementById("detail-modal");
-  const fileUrl = getPublicFileUrl(entry.file_path);
+  const fileUrl = await getPublicFileUrl(entry.file_path);
+  const fileName = entry.file_name || entry.file_path || "";
+  const fileExtension = fileName.split(".").pop().toLowerCase();
+  const imageExtensions = ["avif", "gif", "jpeg", "jpg", "png", "webp"];
+  const filePreview = fileUrl && fileExtension === "pdf"
+    ? `<div class="source-preview"><iframe src="${escapeHtml(fileUrl)}" title="${escapeHtml(entry.source)} PDF preview" loading="lazy"></iframe></div>`
+    : fileUrl && imageExtensions.includes(fileExtension)
+      ? `<div class="source-preview source-preview-image"><img src="${escapeHtml(fileUrl)}" alt="Preview of ${escapeHtml(entry.source)}" loading="lazy" /></div>`
+      : fileUrl
+        ? `<div class="source-preview-unavailable">Preview is not available for this file type.</div>`
+        : "";
   modal.innerHTML = `
     <div class="detail-head">
       <h2>${escapeHtml(entry.source)}</h2>
@@ -1101,12 +1410,14 @@ function openDetail(entry){
       <span class="tag tag-kin">${entry.kin}</span>
       <span class="tag tag-kiq">${entry.kiq}</span>
     </div>
+    ${filePreview}
     <div class="detail-field"><div class="k">Author / organisation</div><div class="v">${escapeHtml(entry.author)}</div></div>
+    ${entryContributorMarkup(entry)}
     <div class="detail-field"><div class="k">Date published / collected</div><div class="v">${entry.date_published || "—"} / ${entry.date_collected || "—"}</div></div>
     <div class="detail-field"><div class="k">Type of source</div><div class="v">${escapeHtml(entry.source_type)}</div></div>
     <div class="detail-field"><div class="k">Relevance to KIQ</div><div class="v">${escapeHtml(entry.relevance)}</div></div>
     <div class="detail-field"><div class="k">File name</div><div class="v" style="font-family:var(--font-sans); font-size:12px;">${escapeHtml(entry.file_name || "")}</div></div>
-    ${fileUrl ? `<a class="detail-file-link" href="${fileUrl}" target="_blank" rel="noopener">Open extract →</a>` : ""}
+    ${fileUrl ? `<a class="detail-file-link" href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer">Open extract in new tab →</a>` : ""}
   `;
   document.getElementById("close-detail").addEventListener("click", closeDetail);
   document.getElementById("detail-overlay").classList.remove("is-hidden");
@@ -1114,10 +1425,10 @@ function openDetail(entry){
 
 function closeDetail(){ document.getElementById("detail-overlay").classList.add("is-hidden"); }
 
-function getPublicFileUrl(path){
+async function getPublicFileUrl(path){
   if (!path || !sbClient) return null;
-  const { data } = sbClient.storage.from("sources").getPublicUrl(path);
-  return data ? data.publicUrl : null;
+  const { data, error } = await sbClient.storage.from("sources").createSignedUrl(path, 3600);
+  return error ? null : data?.signedUrl || null;
 }
 
 // ---------- ADD ENTRY MODAL ----------
@@ -1164,6 +1475,7 @@ async function submitEntry(e){
   const fileInput = document.getElementById("f-file");
   const file = fileInput.files[0];
   const fileName = buildFileName();
+  const addedBy = myMemberProfile()?.name || currentUser?.email || "Unknown contributor";
 
   try {
     const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file, { upsert: true });
@@ -1174,6 +1486,9 @@ async function submitEntry(e){
       kiq: document.getElementById("f-kiq").value,
       source: document.getElementById("f-source").value,
       author: document.getElementById("f-author").value,
+      added_by: addedBy,
+      added_by_email: currentUser?.email || null,
+      added_by_user_id: currentUser?.id || null,
       source_type: document.getElementById("f-type").value,
       date_published: document.getElementById("f-date-pub").value,
       date_collected: document.getElementById("f-date-collected").value,
@@ -1186,11 +1501,12 @@ async function submitEntry(e){
     const { error: insertError } = await sbClient.from("entries").insert(record);
     if (insertError) throw insertError;
 
-    logActivity("added a source", `${record.source} (${record.kin}_${record.kiq})`);
+    await logActivity("added a source", `${record.source} (${record.kin}_${record.kiq})`);
 
     status.textContent = "Saved.";
     status.className = "form-status is-success";
     await loadEntries();
+    await loadActivity();
     setTimeout(closeAddModal, 500);
   } catch (err) {
     console.error(err);
@@ -1210,11 +1526,20 @@ async function loadMembers(){
     await sbClient.from("members").delete().is("user_id", null).in("name", ["FixerCtrl", "Team 01"]);
   }
   const memberFields = canManageLeadership() ? "*" : currentUser
-    ? "id,name,avatar_path,bio,user_id,created_at,last_seen_at"
-    : "id,name,avatar_path,bio,user_id,created_at";
+    ? "id,name,avatar_path,bio,user_id,created_at,last_seen_at,approved"
+    : "id,name,avatar_path,bio,user_id,created_at,approved";
   const { data, error } = await sbClient.from("members").select(memberFields).order("created_at", { ascending: true });
-  if (!error && data) currentMembers = data;
+  if (error) {
+    memberLoadError = error;
+    console.error("Could not load member profiles:", error.message);
+  } else if (data) {
+    currentMembers = data;
+    memberLoadError = null;
+  }
   renderMembers();
+  updateWorkspaceGate();
+  renderEntries();
+  renderActivity();
   renderAuthBox(); // members just loaded, so the sidebar can now show your claimed avatar/name
   await loadWhatsAppSettings();
   populateTaskPeopleDropdowns();
@@ -1236,7 +1561,7 @@ function renderMembers(){
     : currentMembers.filter(member => member.user_id && member.user_id !== currentUser?.id);
   if (directoryNote) {
     directoryNote.textContent = canModerate
-      ? "Admin view: online status, last seen, and login history."
+      ? "Admin view: review pending profiles and approve or revoke workspace access."
       : "Online status and last seen are visible to signed-in team members. Login history is admin-only.";
     directoryNote.classList.toggle("is-hidden", visibleMembers.length === 0);
   }
@@ -1245,15 +1570,26 @@ function renderMembers(){
     card.className = "member-card";
     const avatarUrl = getPublicAvatarUrl(m.avatar_path);
     const canEditPhoto = currentUser && (m.user_id === currentUser.id || canModerate);
+    const memberOnline = isMemberOnline(m);
+    const memberProfileComplete = isMemberProfileComplete(m);
     card.innerHTML = `
-      ${canModerate ? `<div class="member-card-actions"><button class="member-edit" title="Edit member" data-edit-member="${m.id}">Edit</button><button class="member-remove" title="Remove member profile" data-remove-member="${m.id}">&times;</button></div>` : ""}
-      <div class="member-avatar" ${canEditPhoto ? `data-avatar-for="${m.id}" title="Click to change photo"` : ""} style="${canEditPhoto ? "" : "cursor:default;"}">
-        ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
+      <div class="member-card-header">
+        <div class="member-avatar" ${canEditPhoto ? `data-avatar-for="${m.id}" title="Click to change photo"` : ""} style="${canEditPhoto ? "" : "cursor:default;"}">
+          ${avatarUrl ? `<img src="${avatarUrl}" alt="${escapeHtml(m.name)}" />` : initials(m.name)}
+        </div>
+        <div class="member-identity">
+          <div class="member-name">${escapeHtml(m.name)}${m.user_id ? "" : ` <span class="member-unclaimed">Unclaimed</span>`}</div>
+          ${m.bio ? `<div class="member-bio">${escapeHtml(m.bio)}</div>` : ""}
+        </div>
+        ${canModerate ? `<div class="member-card-actions"><span class="member-approval-state ${m.approved && memberProfileComplete ? "is-approved" : "is-pending"}">${m.approved && memberProfileComplete ? "Approved" : memberProfileComplete ? "Pending" : "Profile incomplete"}</span><button class="member-approval" title="${m.approved ? "Revoke access" : memberProfileComplete ? "Approve access" : "Member must submit a complete profile first"}" data-member-approval="${m.id}" ${!m.approved && !memberProfileComplete ? "disabled" : ""}>${m.approved ? "Revoke" : "Approve"}</button><button class="member-edit" title="Edit member" data-edit-member="${m.id}">Edit</button><button class="member-remove" title="Remove member profile" data-remove-member="${m.id}">&times;</button></div>` : ""}
       </div>
-      <div class="member-name">${escapeHtml(m.name)}${m.user_id ? "" : ` <span style="color:var(--text-faint); font-weight:400; font-size:11px;">(unclaimed)</span>`}</div>
-      ${m.bio ? `<div class="member-bio">${escapeHtml(m.bio)}</div>` : ""}
-      ${currentUser && m.user_id ? `<div class="member-presence ${isMemberOnline(m) ? "is-online" : ""}"><span class="presence-dot"></span>${isMemberOnline(m) ? "Online now" : `Last seen ${formatPresenceTime(m.last_seen_at)}`}${canModerate && m.last_login_at ? ` · Login ${formatPresenceTime(m.last_login_at)}` : ""}</div>` : ""}
-      ${canEditPhoto ? `<div class="member-avatar-hint">Click photo to update</div>` : ""}
+      ${currentUser && m.user_id ? `
+        <div class="member-activity">
+          <div class="member-activity-row"><span class="member-activity-label">Presence</span><span class="member-activity-state ${memberOnline ? "is-online" : ""}"><span class="presence-dot"></span>${memberOnline ? "Online now" : "Offline"}</span></div>
+          <div class="member-activity-row"><span class="member-activity-label">Last seen</span><time ${m.last_seen_at ? `datetime="${escapeHtml(m.last_seen_at)}"` : ""}>${m.last_seen_at ? escapeHtml(formatPresenceTime(m.last_seen_at)) : "Not recorded"}</time></div>
+          ${canModerate && m.last_login_at ? `<div class="member-activity-row"><span class="member-activity-label">Last login</span><time datetime="${escapeHtml(m.last_login_at)}">${escapeHtml(formatPresenceTime(m.last_login_at))}</time></div>` : ""}
+        </div>
+      ` : !m.user_id ? `<div class="member-account-status">Profile not linked to an account</div>` : ""}
     `;
     grid.appendChild(card);
   });
@@ -1266,6 +1602,9 @@ function renderMembers(){
   });
   grid.querySelectorAll("[data-edit-member]").forEach(el => {
     el.addEventListener("click", () => openMemberEditor(el.dataset.editMember));
+  });
+  grid.querySelectorAll("[data-member-approval]").forEach(button => {
+    button.addEventListener("click", () => setMemberApproval(button.dataset.memberApproval));
   });
 
   renderYourProfile();
@@ -1334,7 +1673,7 @@ function renderYourProfile(){
 }
 
 function openOwnProfileEditor(){
-  if (!requireAuth()) return;
+  if (!currentUser) { openAuthModal(); return; }
   memberEditorTargetId = null;
   const mine = myMemberProfile();
   document.getElementById("member-modal-title").textContent = mine ? "Edit profile" : "Complete profile";
@@ -1357,7 +1696,14 @@ function formatPresenceTime(isoString){
 async function ensureMyProfile(isNewLogin = false){
   if (!sbClient || !currentUser) return;
   const now = new Date().toISOString();
-  const existing = currentMembers.find(member => member.user_id === currentUser.id);
+  let existing = myMemberProfile();
+  if (!existing) {
+    const { data } = await sbClient.from("members").select("*").eq("user_id", currentUser.id).maybeSingle();
+    if (data) {
+      currentMembers.push(data);
+      existing = data;
+    }
+  }
   if (existing) {
     const updates = { last_seen_at: now };
     if (isNewLogin) updates.last_login_at = now;
@@ -1370,11 +1716,34 @@ async function ensureMyProfile(isNewLogin = false){
   const { data, error } = await sbClient.from("members").insert({
     name: displayName,
     user_id: currentUser.id,
+    approved: isAdminEmail(currentUser.email),
+    profile_completed: false,
     last_seen_at: now,
     last_login_at: isNewLogin ? now : null,
     created_at: now
   }).select().single();
   if (!error && data) currentMembers.push(data);
+}
+
+async function setMemberApproval(memberId){
+  if (!canManageLeadership() || !sbClient) return;
+  const member = currentMembers.find(item => String(item.id) === String(memberId));
+  if (!member) return;
+  const approved = !member.approved;
+  if (approved && !isMemberProfileComplete(member)) {
+    alert("The member must complete their name and short bio before approval.");
+    return;
+  }
+  const { error } = await sbClient.from("members").update({ approved }).eq("id", member.id);
+  if (error) {
+    alert("Could not update member approval: " + error.message);
+    return;
+  }
+  member.approved = approved;
+  await logActivity(approved ? "approved member access" : "revoked member access", member.name);
+  renderMembers();
+  updateWorkspaceGate();
+  if (canAccessWorkspace()) await loadApprovedWorkspace();
 }
 
 async function updateMyPresence(){
@@ -1416,6 +1785,7 @@ function closeAddMemberModal(){
   document.getElementById("member-form").reset();
   document.getElementById("member-form-status").textContent = "";
   memberEditorTargetId = null;
+  updateWorkspaceGate();
 }
 
 let memberEditorTargetId = null;
@@ -1434,15 +1804,24 @@ function openMemberEditor(memberId){
 
 async function submitMember(e){
   e.preventDefault();
-  if (!requireAuth()) return;
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
   const status = document.getElementById("member-form-status");
   if (!sbClient) { status.textContent = "Not connected to Supabase yet."; status.className = "form-status is-error"; return; }
 
-  const name = document.getElementById("m-name").value;
-  const bio = document.getElementById("m-bio").value;
+  const name = document.getElementById("m-name").value.trim();
+  const bio = document.getElementById("m-bio").value.trim();
   const file = document.getElementById("m-avatar").files[0];
   const mine = memberEditorTargetId ? currentMembers.find(member => member.id === memberEditorTargetId) : myMemberProfile();
   if (memberEditorTargetId && !canManageLeadership()) return;
+  if (memberEditorTargetId && !requireAuth()) return;
+  if (!name || !bio) {
+    status.textContent = "Enter a name and short bio to complete this profile.";
+    status.className = "form-status is-error";
+    return;
+  }
   status.textContent = "Saving…";
   status.className = "form-status";
 
@@ -1455,24 +1834,30 @@ async function submitMember(e){
     }
 
     if (mine) {
-      const { error: updErr } = await sbClient.from("members").update({ name, bio, avatar_path: avatarPath }).eq("id", mine.id);
+      const profileUpdates = { name, bio, avatar_path: avatarPath };
+      if (!memberEditorTargetId && !isMemberProfileComplete(mine)) profileUpdates.profile_completed = true;
+      const { error: updErr } = await sbClient.from("members").update(profileUpdates).eq("id", mine.id);
       if (updErr) throw updErr;
-      logActivity(memberEditorTargetId ? "updated a member profile" : "updated their profile", name);
+      await logActivity(memberEditorTargetId ? "updated a member profile" : "updated their profile", name);
     } else {
       const { error: insErr } = await sbClient.from("members").insert({
-        name, bio, avatar_path: avatarPath, user_id: currentUser.id, created_at: new Date().toISOString()
+        name, bio, avatar_path: avatarPath, user_id: currentUser.id, approved: isAdminEmail(currentUser.email), profile_completed: true, created_at: new Date().toISOString()
       });
       if (insErr) throw insErr;
-      logActivity("joined the team", name);
+      await logActivity("joined the team", name);
     }
 
     status.textContent = "Saved.";
     status.className = "form-status is-success";
     await loadMembers();
+    await loadApprovedWorkspace();
     setTimeout(closeAddMemberModal, 400);
   } catch (err) {
     console.error(err);
-    if ((err.message || "").toLowerCase().includes("duplicate")) {
+    const errorMessage = (err.message || "").toLowerCase();
+    if (errorMessage.includes("profile_completed") && (errorMessage.includes("column") || errorMessage.includes("schema cache"))) {
+      status.textContent = "The Supabase database needs the latest profile and approval migration. Ask an admin to run the updated schema.sql in the Supabase SQL Editor, then refresh and submit again.";
+    } else if (errorMessage.includes("duplicate")) {
       status.textContent = "You already have a profile. Use the Edit profile button in your profile card.";
     } else {
       status.textContent = "Something went wrong: " + (err.message || err);
@@ -1499,6 +1884,7 @@ async function handleAvatarReupload(e){
     if (upErr) throw upErr;
     const { error: updErr } = await sbClient.from("members").update({ avatar_path: avatarPath }).eq("id", reuploadTargetId);
     if (updErr) throw updErr;
+    await logActivity("updated a profile photo", member.name);
     await loadMembers();
   } catch (err) {
     console.error(err);
@@ -1518,7 +1904,7 @@ async function removeMember(memberId){
   if (!confirm("Remove this member profile? Their login account is not deleted, but their profile and assignments will be unlinked.")) return;
   const member = currentMembers.find(m => m.id === memberId);
   await sbClient.from("members").delete().eq("id", memberId);
-  logActivity("removed a team member", member ? member.name : undefined);
+  await logActivity("removed a team member", member ? member.name : undefined);
   await loadMembers();
   await loadTasks();
 }
@@ -1950,7 +2336,7 @@ function renderTasks(){
         if (error) throw error;
         task.assigned_to = selected.id;
         if (previousAssigner) task.assigned_by = previousAssigner;
-        logActivity("reassigned a task", `"${task.title}" from ${originalAssignee} to ${selected.name}`);
+        await logActivity("reassigned a task", `"${task.title}" from ${originalAssignee} to ${selected.name}`);
         try {
           const { error: notificationError } = await sbClient.functions.invoke("whatsapp-task-assigned", { body: { task_id: task.id } });
           if (notificationError) console.warn("WhatsApp reassignment alert was not sent:", notificationError);
@@ -1979,7 +2365,7 @@ function renderTasks(){
       renderTasks();
       renderAnalysis();
       renderOverview();
-      logActivity("deleted a task", `"${task.title}"`);
+      await logActivity("deleted a task", `"${task.title}"`);
       await loadTasks();
     });
   });
@@ -2007,9 +2393,11 @@ async function submitTaskComment(event, taskId){
     alert("Could not send the comment. Please ask the admin to run the latest schema.sql migration.\n\n" + error.message);
     return;
   }
+  await logActivity("commented on a task", task.title);
   event.currentTarget.reset();
   await loadTaskComments();
   renderTasks();
+  await loadActivity();
 }
 
 async function updateTaskStatus(taskId, status){
@@ -2022,7 +2410,7 @@ async function updateTaskStatus(taskId, status){
   await sbClient.from("tasks").update({ status }).eq("id", taskId);
   if (task) task.status = status;
   renderOverview();
-  logActivity("changed task status", task ? `"${task.title}" → ${status}` : `→ ${status}`);
+  await logActivity("changed task status", task ? `"${task.title}" → ${status}` : `→ ${status}`);
 }
 
 function populateTaskPeopleDropdowns(){
@@ -2038,17 +2426,36 @@ function populateTaskPeopleDropdowns(){
 
 function populateTaskKinKiqDropdowns(){
   const kinSelect = document.getElementById("t-kin");
-  kinSelect.innerHTML = `<option value="">—</option>`;
-  KINS.forEach(kin => kinSelect.appendChild(new Option(`${kin.id} — ${kin.label}`, kin.id)));
-  kinSelect.addEventListener("change", () => updateTaskKiqOptions(kinSelect.value));
-  updateTaskKiqOptions("");
+  const kiqSelect = document.getElementById("t-kiq");
+  KINS.forEach(kin => {
+    const option = new Option(`${kin.id} — ${kin.label}`, kin.id);
+    option.dataset.filterId = kin.id;
+    option.dataset.filterLabel = kin.label;
+    kinSelect.appendChild(option);
+  });
+  const refreshKinDropdown = wireFilterDropdown(kinSelect, "t-kin");
+  const refreshKiqDropdown = wireFilterDropdown(kiqSelect, "t-kiq");
+  kinSelect.addEventListener("change", () => updateTaskKiqOptions(kinSelect.value, refreshKiqDropdown));
+  updateTaskKiqOptions("", refreshKiqDropdown);
+  document.getElementById("task-form").addEventListener("reset", () => {
+    queueMicrotask(() => {
+      refreshKinDropdown();
+      updateTaskKiqOptions("", refreshKiqDropdown);
+    });
+  });
 }
 
-function updateTaskKiqOptions(kinId){
+function updateTaskKiqOptions(kinId, refreshDropdown){
   const kiqSelect = document.getElementById("t-kiq");
   kiqSelect.innerHTML = `<option value="">—</option>`;
   const kin = KINS.find(k => k.id === kinId);
-  (kin ? kin.kiqs : []).forEach(q => kiqSelect.appendChild(new Option(`${q.id} — ${q.label}`, q.id)));
+  (kin ? kin.kiqs : []).forEach(q => {
+    const option = new Option(`${q.id} — ${q.label}`, q.id);
+    option.dataset.filterId = q.id;
+    option.dataset.filterLabel = q.label;
+    kiqSelect.appendChild(option);
+  });
+  refreshDropdown();
 }
 
 function wireTaskModal(){
@@ -2103,7 +2510,7 @@ async function submitTask(e){
     const { data: createdTask, error } = await sbClient.from("tasks").insert(record).select("id").single();
     if (error) throw error;
     const assignee = memberById(record.assigned_to);
-    logActivity("assigned a task", `"${record.title}" to ${assignee ? assignee.name : "someone"}`);
+    await logActivity("assigned a task", `"${record.title}" to ${assignee ? assignee.name : "someone"}`);
     status.textContent = "Assigned.";
     status.className = "form-status is-success";
     try {
@@ -2133,16 +2540,21 @@ async function submitTask(e){
 // ACTIVITY LOG (append-only audit trail)
 // ============================================================
 async function logActivity(action, details){
-  if (!sbClient || !currentUser) return;
+  if (!sbClient || !currentUser) return false;
   try {
-    await sbClient.from("activity_log").insert({
+    const { error } = await sbClient.from("activity_log").insert({
       actor_email: currentUser.email,
+      actor_name: myMemberProfile()?.name || currentUser.user_metadata?.full_name || currentUser.email,
+      actor_user_id: currentUser.id,
       action,
       details: details || null,
       created_at: new Date().toISOString(),
     });
+    if (error) throw error;
+    return true;
   } catch (err) {
     console.error("Activity log failed (non-fatal):", err);
+    return false;
   }
 }
 
@@ -2252,7 +2664,15 @@ function renderActivity(){
     Object.entries(authors).forEach(([author, activities]) => {
       const authorGroup = document.createElement("div");
       authorGroup.className = "activity-author-group";
-      authorGroup.innerHTML = `<h3 class="activity-author-heading"><span class="activity-author-avatar">${escapeHtml(initials(author))}</span>${escapeHtml(author)}<span class="activity-author-count">${activities.length}</span></h3>`;
+      const actor = activities[0];
+      const profile = currentMembers.find(member => member.user_id === actor.actor_user_id);
+      const actorName = profile?.name || actor.actor_name || actor.actor_email || "Unknown user";
+      const actorEmail = actor.actor_email || "Email not recorded";
+      const avatarUrl = profile?.avatar_path ? getPublicAvatarUrl(profile.avatar_path) : null;
+      const avatar = avatarUrl
+        ? `<img src="${escapeHtml(avatarUrl)}" alt="" />`
+        : escapeHtml(initials(actorName));
+      authorGroup.innerHTML = `<h3 class="activity-author-heading"><span class="activity-author-avatar">${avatar}</span><span class="activity-author-identity"><strong>${escapeHtml(actorName)}</strong><small>${escapeHtml(actorEmail)}</small></span><span class="activity-author-count">${activities.length}</span></h3>`;
       activities.forEach(a => {
         const item = document.createElement("div");
         item.className = "activity-item";

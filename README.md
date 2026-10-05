@@ -39,8 +39,24 @@ Edit `config.js` and add:
 
 ### 3. Open the App
 1. Save `config.js`
-2. Open `index.html` in a web browser
-3. Sign in with your group's email
+2. Open `landing.html` in a web browser
+3. Sign in with Google or your approved email account
+
+### Google Sign-In, Approval, and Hub Guide
+1. Run the updated `schema.sql` in the Supabase SQL Editor. Existing members will need to submit their profile once; new accounts start pending.
+2. In Supabase Authentication → Providers, enable Google and add the Google OAuth client ID and secret from Google Cloud Console.
+3. In Google Cloud Console, add `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized redirect URI.
+4. In Supabase Authentication → URL Configuration, set the site URL and allow the deployed `landing.html` URL, the workspace `index.html` URL, and local development URLs as redirects.
+5. Admins approve or revoke workspace access from each member card in the Team tab. Every member must submit a name and short bio before using the workspace; profile photos remain optional.
+6. Set up Hub Guide:
+  - **Create the OpenAI API key:** Sign in at [OpenAI Platform API keys](sk-...5gsA), create a project secret key, and copy it when shown. ChatGPT subscriptions and API billing are separate; enable API billing for the OpenAI project if needed.
+  - **Store the key in Supabase:** Open your Supabase project → **Project Settings → Edge Functions → Secrets**. Add a secret named `OPENAI_API_KEY` and paste the key as its value. Never put it in `config.js`, the browser, or a message.
+  - **Authenticate the Supabase CLI:** From this repository, run `npx supabase login` and complete the browser sign-in. The CLI uses browser authorization; it does not need an OpenAI key or a verification code. If using a headless terminal, create a Supabase personal access token in **Supabase Dashboard → Account → Access Tokens**, then follow the CLI prompt to authenticate with that token. Do not share the token.
+  - **Deploy Hub Guide:** Run `npx supabase functions deploy site-guide --project-ref pqrwxsuumxrteehtkrnt` from the repository root.
+  - **Verify deployment:** In a terminal, run `curl -i -X OPTIONS https://pqrwxsuumxrteehtkrnt.supabase.co/functions/v1/site-guide`. A deployed function responds with HTTP 200. Then refresh the site and ask Hub Guide where a page or feature is located.
+  - `SITE_GUIDE_MODEL` is optional and defaults to `gpt-4o-mini`.
+
+Hub Guide only answers site navigation and feature-use questions. It does not receive repository records or files, recommend sources, or upload content. User questions and recent chat turns are sent to the configured AI provider. Never put the AI key in `config.js` or browser code.
 
 ---
 
