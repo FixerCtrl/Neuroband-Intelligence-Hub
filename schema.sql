@@ -204,6 +204,152 @@ create trigger stamp_activity_actor
   before insert on activity_log
   for each row execute function stamp_activity_actor();
 
+create or replace function audit_site_change() returns trigger as $$
+declare
+  old_row jsonb;
+  new_row jsonb;
+  record_row jsonb;
+  action_text text;
+  details_text text;
+  task_name text;
+  assignee_name text;
+  source_actor_user_id uuid;
+  source_actor_email text;
+  source_actor_name text;
+begin
+  if tg_op <> 'INSERT' then old_row := to_jsonb(old); end if;
+  if tg_op <> 'DELETE' then new_row := to_jsonb(new); end if;
+  record_row := coalesce(new_row, old_row);
+
+  if tg_table_name = 'members' and tg_op = 'UPDATE'
+      and (old_row - array['last_seen_at', 'last_login_at'])
+          = (new_row - array['last_seen_at', 'last_login_at']) then
+    return null;
+  end if;
+  if tg_table_name = 'member_whatsapp' and (
+      (tg_op = 'INSERT' and new_row ->> 'phone_e164' is null)
+      or (tg_op = 'UPDATE' and old_row ->> 'phone_e164' is not distinct from new_row ->> 'phone_e164')
+      or (tg_op = 'DELETE' and old_row ->> 'phone_e164' is null)
+  ) then
+    return null;
+  end if;
+
+  case tg_table_name
+    when 'entries' then
+      source_actor_user_id := nullif(record_row ->> 'added_by_user_id', '')::uuid;
+      source_actor_email := record_row ->> 'added_by_email';
+      source_actor_name := record_row ->> 'added_by';
+      action_text := case tg_op
+        when 'INSERT' then 'added a source'
+        when 'UPDATE' then 'updated a source'
+        else 'deleted a source'
+      end;
+      details_text := coalesce(record_row ->> 'source', 'Source')
+        || ' (' || coalesce(record_row ->> 'kin', '?')
+        || '_' || coalesce(record_row ->> 'kiq', '?') || ')';
+    when 'documents' then
+      action_text := case
+        when record_row ->> 'slug' = 'manual' then 'updated the Manual'
+        else 'updated the Collection Plan'
+      end;
+    when 'members' then
+      if tg_op = 'INSERT' then
+        action_text := 'joined the team';
+      elsif tg_op = 'DELETE' then
+        action_text := 'removed a team member';
+      elsif old_row ->> 'approved' is distinct from new_row ->> 'approved' then
+        action_text := case new_row ->> 'approved'
+          when 'true' then 'approved member access'
+          else 'revoked member access'
+        end;
+      elsif old_row ->> 'avatar_path' is distinct from new_row ->> 'avatar_path' then
+        action_text := 'updated a profile photo';
+      else
+        action_text := 'updated a member profile';
+      end if;
+      details_text := record_row ->> 'name';
+    when 'member_whatsapp' then
+      select m.user_id, u.email, m.name
+        into source_actor_user_id, source_actor_email, source_actor_name
+        from members m
+        left join auth.users u on u.id = m.user_id
+        where m.id = (record_row ->> 'member_id')::uuid;
+      action_text := case
+        when tg_op = 'DELETE' or new_row ->> 'phone_e164' is null then 'disconnected WhatsApp'
+        else 'connected WhatsApp'
+      end;
+      details_text := source_actor_name;
+    when 'tasks' then
+      task_name := coalesce(record_row ->> 'title', 'Task');
+      if tg_op = 'INSERT' then
+        action_text := 'assigned a task';
+        select name into assignee_name from members where id = (record_row ->> 'assigned_to')::uuid;
+        details_text := '"' || task_name || '" to ' || coalesce(assignee_name, 'someone');
+      elsif tg_op = 'DELETE' then
+        action_text := 'deleted a task';
+        details_text := '"' || task_name || '"';
+      elsif old_row ->> 'assigned_to' is distinct from new_row ->> 'assigned_to' then
+        action_text := 'reassigned a task';
+        select name into assignee_name from members where id = (old_row ->> 'assigned_to')::uuid;
+        details_text := '"' || task_name || '" from ' || coalesce(assignee_name, 'Unassigned');
+        select name into assignee_name from members where id = (new_row ->> 'assigned_to')::uuid;
+        details_text := details_text || ' to ' || coalesce(assignee_name, 'Unassigned');
+      elsif old_row ->> 'status' is distinct from new_row ->> 'status' then
+        action_text := 'changed task status';
+        details_text := '"' || task_name || '" → ' || coalesce(new_row ->> 'status', 'unknown');
+      else
+        action_text := 'updated a task';
+        details_text := '"' || task_name || '"';
+      end if;
+    when 'task_comments' then
+      action_text := case tg_op
+        when 'INSERT' then 'commented on a task'
+        when 'UPDATE' then 'edited a task comment'
+        else 'deleted a task comment'
+      end;
+      select title into task_name from tasks where id = (record_row ->> 'task_id')::uuid;
+      details_text := coalesce(task_name, 'Task');
+    else
+      return null;
+  end case;
+
+  insert into activity_log (actor_email, actor_name, actor_user_id, action, details)
+  values (source_actor_email, source_actor_name, source_actor_user_id, action_text, details_text);
+
+  return null;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists audit_entries_change on entries;
+create trigger audit_entries_change
+  after insert or update or delete on entries
+  for each row execute function audit_site_change();
+
+drop trigger if exists audit_documents_change on documents;
+create trigger audit_documents_change
+  after insert or update or delete on documents
+  for each row execute function audit_site_change();
+
+drop trigger if exists audit_members_change on members;
+create trigger audit_members_change
+  after insert or update or delete on members
+  for each row execute function audit_site_change();
+
+drop trigger if exists audit_member_whatsapp_change on member_whatsapp;
+create trigger audit_member_whatsapp_change
+  after insert or update or delete on member_whatsapp
+  for each row execute function audit_site_change();
+
+drop trigger if exists audit_tasks_change on tasks;
+create trigger audit_tasks_change
+  after insert or update or delete on tasks
+  for each row execute function audit_site_change();
+
+drop trigger if exists audit_task_comments_change on task_comments;
+create trigger audit_task_comments_change
+  after insert or update or delete on task_comments
+  for each row execute function audit_site_change();
+
 create or replace function is_approved_member() returns boolean as $$
   select is_admin() or exists (
     select 1 from members
@@ -355,6 +501,7 @@ on conflict (id) do nothing;
 
 drop policy if exists "Allow all read on sources bucket" on storage.objects;
 drop policy if exists "Allow all upload on sources bucket" on storage.objects;
+drop policy if exists "Authenticated update on sources bucket" on storage.objects;
 drop policy if exists "Public read on sources bucket" on storage.objects;
 drop policy if exists "Authenticated upload on sources bucket" on storage.objects;
 create policy "Public read on sources bucket" on storage.objects
@@ -385,13 +532,15 @@ create policy "Authenticated update on avatars bucket" on storage.objects
 -- ------------------------------------------------------------
 alter table activity_log enable row level security;
 drop policy if exists "Public read on activity_log" on activity_log;
+drop policy if exists "Allow all read on activity_log" on activity_log;
+drop policy if exists "Allow all insert on activity_log" on activity_log;
+drop policy if exists "Allow all update on activity_log" on activity_log;
+drop policy if exists "Allow all delete on activity_log" on activity_log;
 drop policy if exists "Authenticated insert on activity_log" on activity_log;
 drop policy if exists "Admin update on activity_log" on activity_log;
 drop policy if exists "Admin delete on activity_log" on activity_log;
 create policy "Public read on activity_log" on activity_log for select using (true);
 create policy "Authenticated insert on activity_log" on activity_log for insert with check (auth.role() = 'authenticated');
-create policy "Admin update on activity_log" on activity_log for update using (is_admin()) with check (is_admin());
-create policy "Admin delete on activity_log" on activity_log for delete using (is_admin());
 
 -- ------------------------------------------------------------
 -- APPROVED MEMBER ACCESS
@@ -402,6 +551,9 @@ create policy "Admin delete on activity_log" on activity_log for delete using (i
 drop policy if exists "Public read on entries" on entries;
 drop policy if exists "Authenticated insert on entries" on entries;
 drop policy if exists "Authenticated update on entries" on entries;
+drop policy if exists "Approved members read entries" on entries;
+drop policy if exists "Approved members insert entries" on entries;
+drop policy if exists "Approved members update entries" on entries;
 create policy "Approved members read entries" on entries for select using (is_approved_member());
 create policy "Approved members insert entries" on entries for insert
   with check (auth.role() = 'authenticated' and is_approved_member());
@@ -411,6 +563,9 @@ create policy "Approved members update entries" on entries for update
 drop policy if exists "Public read on documents" on documents;
 drop policy if exists "Authenticated insert on documents" on documents;
 drop policy if exists "Everyone can edit documents" on documents;
+drop policy if exists "Approved members read documents" on documents;
+drop policy if exists "Approved members insert documents" on documents;
+drop policy if exists "Approved members update documents" on documents;
 create policy "Approved members read documents" on documents for select using (is_approved_member());
 create policy "Approved members insert documents" on documents for insert
   with check (auth.role() = 'authenticated' and is_approved_member());
@@ -419,7 +574,9 @@ create policy "Approved members update documents" on documents for update
 
 drop policy if exists "Public read on members" on members;
 drop policy if exists "Users insert own member profile" on members;
+drop policy if exists "Users insert own pending profile" on members;
 drop policy if exists "Users or admin update member profile" on members;
+drop policy if exists "Members read approved profiles and own pending profile" on members;
 create policy "Members read approved profiles and own pending profile" on members for select
   using (user_id = auth.uid() or is_approved_member());
 create policy "Users insert own pending profile" on members for insert
@@ -431,6 +588,9 @@ create policy "Users or admin update member profile" on members for update
 drop policy if exists "Public read on tasks" on tasks;
 drop policy if exists "Authenticated insert on tasks" on tasks;
 drop policy if exists "Task assignee or admin update on tasks" on tasks;
+drop policy if exists "Approved members read tasks" on tasks;
+drop policy if exists "Approved members insert tasks" on tasks;
+drop policy if exists "Approved task assignee or admin update" on tasks;
 create policy "Approved members read tasks" on tasks for select using (is_approved_member());
 create policy "Approved members insert tasks" on tasks for insert
   with check (
@@ -450,20 +610,40 @@ create policy "Approved task assignee or admin update" on tasks for update
 
 drop policy if exists "Public read on task_comments" on task_comments;
 drop policy if exists "Authenticated insert on task_comments" on task_comments;
+drop policy if exists "Approved members read task comments" on task_comments;
+drop policy if exists "Approved members insert task comments" on task_comments;
 create policy "Approved members read task comments" on task_comments for select using (is_approved_member());
 create policy "Approved members insert task comments" on task_comments for insert
   with check (auth.role() = 'authenticated' and is_approved_member());
 
 drop policy if exists "Public read on sources bucket" on storage.objects;
 drop policy if exists "Authenticated upload on sources bucket" on storage.objects;
+drop policy if exists "Approved members read source files" on storage.objects;
+drop policy if exists "Approved members upload source files" on storage.objects;
+drop policy if exists "Approved members update source files" on storage.objects;
+drop policy if exists "Approved members delete source files" on storage.objects;
 update storage.buckets set public = false where id = 'sources';
 create policy "Approved members read source files" on storage.objects
   for select using (bucket_id = 'sources' and is_approved_member());
 create policy "Approved members upload source files" on storage.objects
   for insert with check (bucket_id = 'sources' and auth.role() = 'authenticated' and is_approved_member());
+create policy "Approved members delete source files" on storage.objects
+  for delete using (
+    bucket_id = 'sources'
+    and is_approved_member()
+    and (owner_id = auth.uid()::text or is_admin())
+  );
 
 drop policy if exists "Public read on activity_log" on activity_log;
+drop policy if exists "Allow all read on activity_log" on activity_log;
+drop policy if exists "Allow all insert on activity_log" on activity_log;
+drop policy if exists "Allow all update on activity_log" on activity_log;
+drop policy if exists "Allow all delete on activity_log" on activity_log;
 drop policy if exists "Authenticated insert on activity_log" on activity_log;
+drop policy if exists "Admin update on activity_log" on activity_log;
+drop policy if exists "Admin delete on activity_log" on activity_log;
+drop policy if exists "Approved members read activity log" on activity_log;
+drop policy if exists "Authenticated users record activity" on activity_log;
 create policy "Approved members read activity log" on activity_log for select using (is_approved_member());
 create policy "Authenticated users record activity" on activity_log for insert
   with check (auth.role() = 'authenticated');

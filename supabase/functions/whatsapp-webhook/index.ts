@@ -233,15 +233,6 @@ async function handleIntakeText(admin: ReturnType<typeof createClient>, phone: s
     };
     const { error: insertError } = await admin.from("entries").insert(record);
     if (insertError) throw insertError;
-    const { error: activityError } = await admin.from("activity_log").insert({
-      actor_email: actorEmail,
-      actor_name: member.name,
-      actor_user_id: member.user_id,
-      action: "added a source via WhatsApp",
-      details: `${record.source} (${record.kin}_${record.kiq})`,
-      created_at: new Date().toISOString(),
-    });
-    if (activityError) console.warn("Could not record WhatsApp source activity:", activityError.message);
     await admin.from("whatsapp_intake_sessions").delete().eq("phone_e164", phone);
     await sendWhatsAppText(phone, `Saved to the Repository: ${record.source} (${record.kin}_${record.kiq}).`);
     return;

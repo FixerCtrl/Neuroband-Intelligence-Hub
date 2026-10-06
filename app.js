@@ -52,8 +52,8 @@ CONSISTENCY
 - Review the generated file name before saving.
 
 FILE NAMING CONVENTION
-NEUROBAND_[KIN]_[KIQ]_[SourceType]_[YYYYMMDD]_[ShortSourceName].[ext]
-Example: NEUROBAND_KIN2_KIQ1_NewsArticle_20240312_BusinessInsiderAfrica.pdf
+NEUROBAND_[KIN]_[KIQ]_[SourceType]_[YYYYMMDD]_[ShortSourceName]_[UniqueID].[ext]
+Example: NEUROBAND_KIN2_KIQ1_NewsArticle_20240312_BusinessInsiderAfrica_a1b2c3d4.pdf
 
 SYSTEM UPDATE RULES
 - Do not delete sources that have been discussed in meetings.
@@ -66,6 +66,8 @@ Edit this page when the process changes. Changes are saved after selecting Save 
 
 let sbClient = null;
 let currentEntries = [];
+let currentEntriesLoadError = null;
+let entryUploadToken = "";
 let currentMembers = [];
 let memberLoadError = null;
 let currentTasks = [];
@@ -74,6 +76,7 @@ let taskCommentsUnavailable = false;
 let currentTaskView = "mine";
 let currentUser = null;
 let currentActivity = [];
+let activityLoadError = null;
 let calendarCurrentDate = new Date();
 let myWorkFilter = "all";
 let whatsappLinkPoll = null;
@@ -175,9 +178,11 @@ async function loadApprovedWorkspace(){
   updateWorkspaceGate();
   if (!canAccessWorkspace()) {
     currentEntries = [];
+    currentEntriesLoadError = null;
     currentTasks = [];
     currentTaskComments = [];
     currentActivity = [];
+    activityLoadError = null;
     renderOverview();
     renderAnalysis();
     renderEntries();
@@ -332,7 +337,6 @@ function wireWhatsAppSettings(){
       safeId("whatsapp-link-instructions").classList.add("is-hidden");
       safeId("whatsapp-open-link").classList.add("is-hidden");
       await loadWhatsAppSettings();
-      await logActivity("disconnected WhatsApp");
     } catch (error) {
       console.error("Could not disconnect WhatsApp:", error);
       safeId("whatsapp-settings-status").textContent = "Could not disconnect WhatsApp. Please try again.";
@@ -1067,9 +1071,6 @@ async function saveDocument(slug){
   document.getElementById("view-" + slug).innerHTML = cleanHtml;
   document.getElementById("view-" + slug).dataset.raw = newContent;
   toggleEdit(slug, false);
-  const activitySaved = await logActivity("updated the " + (slug === "manual" ? "Manual" : "Collection Plan"));
-  await loadActivity();
-  if (!activitySaved) console.error("Document saved, but its Activity record could not be saved.");
 }
 
 // ---------- REPOSITORY: dropdowns ----------
@@ -1210,10 +1211,11 @@ function buildFileName(){
   const source = slugifySource(document.getElementById("f-source").value);
   const fileInput = document.getElementById("f-file");
   const ext = fileInput.files[0] ? "." + fileInput.files[0].name.split(".").pop() : "";
-  return `${PROJECT_TAG}_${kin}_${kiq}_${type}_${dateStr}_${source}${ext}`;
+  return `${PROJECT_TAG}_${kin}_${kiq}_${type}_${dateStr}_${source}_${entryUploadToken}${ext}`;
 }
 
 function updateFilenamePreview(){
+  if (!entryUploadToken) entryUploadToken = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const preview = document.getElementById("filename-preview");
   preview.textContent = "Will be saved as: " + buildFileName();
 }
@@ -1237,8 +1239,12 @@ function wireFilters(){
 async function loadEntries(){
   if (!sbClient) { renderEntries(); return; }
   const { data, error } = await sbClient.from("entries").select("*").order("created_at", { ascending: false });
+  currentEntriesLoadError = error;
+  if (error) console.error("Repository load failed:", error);
   if (!error && data) currentEntries = data;
-  document.getElementById("entry-count").textContent = `${currentEntries.length} ${currentEntries.length === 1 ? "entry" : "entries"} stored`;
+  document.getElementById("entry-count").textContent = currentEntriesLoadError
+    ? `Could not refresh sources: ${currentEntriesLoadError.message}`
+    : `${currentEntries.length} ${currentEntries.length === 1 ? "entry" : "entries"} stored`;
   renderEntries();
   renderAnalysis();
   renderOverview();
@@ -1274,7 +1280,11 @@ function renderEntries(){
 
   const grid = document.getElementById("card-grid");
   grid.innerHTML = "";
-  document.getElementById("empty-state").classList.toggle("is-hidden", filtered.length !== 0);
+  const emptyState = document.getElementById("empty-state");
+  emptyState.textContent = currentEntriesLoadError && !currentEntries.length
+    ? `Could not load sources: ${currentEntriesLoadError.message}`
+    : "No entries match yet. Add your first source, or clear your filters.";
+  emptyState.classList.toggle("is-hidden", filtered.length !== 0 && !currentEntriesLoadError);
   const summary = document.getElementById("repository-filter-summary");
   summary.textContent = `Showing ${filtered.length} of ${currentEntries.length} sources`;
   summary.classList.toggle("is-hidden", currentEntries.length === 0);
@@ -1353,8 +1363,15 @@ function renderEntries(){
         alert("Could not delete entry: " + error.message);
         return;
       }
-      if (entry.file_path) await sbClient.storage.from("sources").remove([entry.file_path]);
-      await logActivity("deleted a repository entry", entry.source);
+      if (entry.file_path) {
+        try {
+          const { error: fileError } = await sbClient.storage.from("sources").remove([entry.file_path]);
+          if (fileError) alert("The repository entry was deleted, but its source file could not be removed: " + fileError.message);
+        } catch (fileError) {
+          console.error("Repository entry was deleted, but its source file could not be removed:", fileError);
+          alert("The repository entry was deleted, but its source file could not be removed. Please contact an admin.");
+        }
+      }
       await loadEntries();
       await loadActivity();
     });
@@ -1435,6 +1452,7 @@ async function getPublicFileUrl(path){
 function wireModal(){
   document.getElementById("open-add-entry").addEventListener("click", () => {
     if (!requireAuth()) return;
+    entryUploadToken = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     document.getElementById("modal-overlay").classList.remove("is-hidden");
     updateFilenamePreview();
   });
@@ -1454,6 +1472,7 @@ function closeAddModal(){
   document.getElementById("entry-form").reset();
   document.getElementById("form-status").textContent = "";
   document.getElementById("form-status").className = "form-status";
+  entryUploadToken = "";
 }
 
 async function submitEntry(e){
@@ -1476,10 +1495,13 @@ async function submitEntry(e){
   const file = fileInput.files[0];
   const fileName = buildFileName();
   const addedBy = myMemberProfile()?.name || currentUser?.email || "Unknown contributor";
+  let uploadedFile = false;
+  let entrySaved = false;
 
   try {
-    const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file, { upsert: true });
+    const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file);
     if (uploadError) throw uploadError;
+    uploadedFile = true;
 
     const record = {
       kin: document.getElementById("f-kin").value,
@@ -1500,8 +1522,7 @@ async function submitEntry(e){
 
     const { error: insertError } = await sbClient.from("entries").insert(record);
     if (insertError) throw insertError;
-
-    await logActivity("added a source", `${record.source} (${record.kin}_${record.kiq})`);
+    entrySaved = true;
 
     status.textContent = "Saved.";
     status.className = "form-status is-success";
@@ -1512,6 +1533,18 @@ async function submitEntry(e){
     console.error(err);
     status.textContent = "Something went wrong: " + (err.message || err);
     status.className = "form-status is-error";
+    if (uploadedFile && !entrySaved) {
+      try {
+        const { error: cleanupError } = await sbClient.storage.from("sources").remove([fileName]);
+        if (cleanupError) {
+          console.error("Could not remove source file after a failed repository save:", cleanupError);
+          status.textContent += " The uploaded file could not be removed; please contact an admin.";
+        }
+      } catch (cleanupError) {
+        console.error("Could not remove source file after a failed repository save:", cleanupError);
+        status.textContent += " The uploaded file could not be removed; please contact an admin.";
+      }
+    }
   } finally {
     submitBtn.disabled = false;
   }
@@ -1740,7 +1773,6 @@ async function setMemberApproval(memberId){
     return;
   }
   member.approved = approved;
-  await logActivity(approved ? "approved member access" : "revoked member access", member.name);
   renderMembers();
   updateWorkspaceGate();
   if (canAccessWorkspace()) await loadApprovedWorkspace();
@@ -1838,13 +1870,11 @@ async function submitMember(e){
       if (!memberEditorTargetId && !isMemberProfileComplete(mine)) profileUpdates.profile_completed = true;
       const { error: updErr } = await sbClient.from("members").update(profileUpdates).eq("id", mine.id);
       if (updErr) throw updErr;
-      await logActivity(memberEditorTargetId ? "updated a member profile" : "updated their profile", name);
     } else {
       const { error: insErr } = await sbClient.from("members").insert({
         name, bio, avatar_path: avatarPath, user_id: currentUser.id, approved: isAdminEmail(currentUser.email), profile_completed: true, created_at: new Date().toISOString()
       });
       if (insErr) throw insErr;
-      await logActivity("joined the team", name);
     }
 
     status.textContent = "Saved.";
@@ -1884,7 +1914,6 @@ async function handleAvatarReupload(e){
     if (upErr) throw upErr;
     const { error: updErr } = await sbClient.from("members").update({ avatar_path: avatarPath }).eq("id", reuploadTargetId);
     if (updErr) throw updErr;
-    await logActivity("updated a profile photo", member.name);
     await loadMembers();
   } catch (err) {
     console.error(err);
@@ -1902,9 +1931,11 @@ async function removeMember(memberId){
     return;
   }
   if (!confirm("Remove this member profile? Their login account is not deleted, but their profile and assignments will be unlinked.")) return;
-  const member = currentMembers.find(m => m.id === memberId);
-  await sbClient.from("members").delete().eq("id", memberId);
-  await logActivity("removed a team member", member ? member.name : undefined);
+  const { error } = await sbClient.from("members").delete().eq("id", memberId);
+  if (error) {
+    alert("Could not remove team member: " + error.message);
+    return;
+  }
   await loadMembers();
   await loadTasks();
 }
@@ -2330,13 +2361,11 @@ function renderTasks(){
       }
 
       const previousAssigner = task.assigned_by;
-      const originalAssignee = currentAssignee ? currentAssignee.name : "Unassigned";
       try {
         const { error } = await sbClient.from("tasks").update({ assigned_to: selected.id, assigned_by: previousAssigner }).eq("id", task.id);
         if (error) throw error;
         task.assigned_to = selected.id;
         if (previousAssigner) task.assigned_by = previousAssigner;
-        await logActivity("reassigned a task", `"${task.title}" from ${originalAssignee} to ${selected.name}`);
         try {
           const { error: notificationError } = await sbClient.functions.invoke("whatsapp-task-assigned", { body: { task_id: task.id } });
           if (notificationError) console.warn("WhatsApp reassignment alert was not sent:", notificationError);
@@ -2365,7 +2394,6 @@ function renderTasks(){
       renderTasks();
       renderAnalysis();
       renderOverview();
-      await logActivity("deleted a task", `"${task.title}"`);
       await loadTasks();
     });
   });
@@ -2393,7 +2421,6 @@ async function submitTaskComment(event, taskId){
     alert("Could not send the comment. Please ask the admin to run the latest schema.sql migration.\n\n" + error.message);
     return;
   }
-  await logActivity("commented on a task", task.title);
   event.currentTarget.reset();
   await loadTaskComments();
   renderTasks();
@@ -2407,10 +2434,14 @@ async function updateTaskStatus(taskId, status){
     alert("Only the assigned member or the admin can change this task status.");
     return;
   }
-  await sbClient.from("tasks").update({ status }).eq("id", taskId);
+  const { error } = await sbClient.from("tasks").update({ status }).eq("id", taskId);
+  if (error) {
+    alert("Could not update task status: " + error.message);
+    await loadTasks();
+    return;
+  }
   if (task) task.status = status;
   renderOverview();
-  await logActivity("changed task status", task ? `"${task.title}" → ${status}` : `→ ${status}`);
 }
 
 function populateTaskPeopleDropdowns(){
@@ -2509,8 +2540,6 @@ async function submitTask(e){
   try {
     const { data: createdTask, error } = await sbClient.from("tasks").insert(record).select("id").single();
     if (error) throw error;
-    const assignee = memberById(record.assigned_to);
-    await logActivity("assigned a task", `"${record.title}" to ${assignee ? assignee.name : "someone"}`);
     status.textContent = "Assigned.";
     status.className = "form-status is-success";
     try {
@@ -2560,8 +2589,30 @@ async function logActivity(action, details){
 
 async function loadActivity(){
   if (!sbClient) { populateActivityFilters(); renderActivity(); return; }
-  const { data, error } = await sbClient.from("activity_log").select("*").order("created_at", { ascending: false }).limit(200);
-  if (!error && data) currentActivity = data;
+  const pageSize = 1000;
+  const activities = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await sbClient.from("activity_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) {
+      activityLoadError = error;
+      console.error("Activity load failed:", error);
+      break;
+    }
+    if (!data) {
+      activityLoadError = null;
+      currentActivity = activities;
+      break;
+    }
+    activities.push(...data);
+    if (data.length < pageSize) {
+      activityLoadError = null;
+      currentActivity = activities;
+      break;
+    }
+  }
   populateActivityFilters();
   renderActivity();
 }
@@ -2637,12 +2688,15 @@ function renderActivity(){
     }
     return true;
   });
-  emptyState.textContent = currentActivity.length ? "No activity matches these filters." : "No activity recorded yet.";
+  emptyState.textContent = activityLoadError && !currentActivity.length
+    ? `Could not load activity: ${activityLoadError.message}`
+    : currentActivity.length ? "No activity matches these filters." : "No activity recorded yet.";
   emptyState.classList.toggle("is-hidden", filteredActivities.length !== 0);
   const summary = document.getElementById("activity-filter-summary");
-  summary.textContent = `Showing ${filteredActivities.length} of ${currentActivity.length} activities`;
+  summary.textContent = activityLoadError
+    ? `Activity history may be incomplete: ${activityLoadError.message}`
+    : `Showing ${filteredActivities.length} of ${currentActivity.length} activities`;
   summary.classList.toggle("is-hidden", currentActivity.length === 0);
-  const canManageActivities = !!currentUser && isAdminEmail(currentUser.email);
   const dates = filteredActivities.reduce((grouped, activity) => {
     const dateKey = activityDateKey(activity.created_at);
     if (!grouped[dateKey]) grouped[dateKey] = { label: activityDateLabel(activity.created_at), activities: [] };
@@ -2682,7 +2736,6 @@ function renderActivity(){
             <div class="activity-line">${escapeHtml(a.action)}${a.details ? ` — ${escapeHtml(a.details)}` : ""}</div>
             <div class="activity-time">${relativeTime(a.created_at)}</div>
           </div>
-          ${canManageActivities ? `<div class="activity-actions"><button class="btn btn-ghost btn-small" data-edit-activity-id="${a.id}">Edit</button><button class="btn btn-ghost btn-small" data-delete-activity-id="${a.id}">Delete</button></div>` : ""}
         `;
         authorGroup.appendChild(item);
       });
@@ -2692,34 +2745,6 @@ function renderActivity(){
   });
 
   renderNotifications();
-
-  list.querySelectorAll("[data-edit-activity-id]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      if (!canManageActivities) return;
-      const activity = currentActivity.find(a => String(a.id) === btn.dataset.editActivityId);
-      if (!activity) return;
-      const original = `${activity.action}${activity.details ? ` — ${activity.details}` : ""}`;
-      const next = prompt("Edit this activity entry:", original);
-      if (next === null) return;
-      const [action, ...rest] = next.split(" — ");
-      const details = rest.join(" — ").trim() || null;
-      await sbClient.from("activity_log").update({ action: action.trim(), details }).eq("id", activity.id);
-      await loadActivity();
-    });
-  });
-
-  list.querySelectorAll("[data-delete-activity-id]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      if (!canManageActivities) return;
-      if (!confirm("Delete this activity entry?")) return;
-      await sbClient.from("activity_log").delete().eq("id", btn.dataset.deleteActivityId);
-      await loadActivity();
-    });
-  });
-}
-
-function canManageActivities(){
-  return !!currentUser && isAdminEmail(currentUser.email);
 }
 
 // ============================================================

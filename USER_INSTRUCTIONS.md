@@ -214,9 +214,9 @@ The **Repository tab** is your central database. Each entry represents one sourc
 - **Do NOT add a link.** The system only accepts actual file uploads.
 - The system will automatically generate a file name following your group's naming convention:
   ```
-  NEUROBAND_KIN2_KIQ1_NewsArticle_20240312_BusinessInsiderAfrica.pdf
+  NEUROBAND_KIN2_KIQ1_NewsArticle_20240312_BusinessInsiderAfrica_a1b2c3d4.pdf
   ```
-- Review the generated file name and confirm before saving.
+- A unique suffix prevents a new upload from overwriting an existing extract with the same source details. Review the generated file name before saving.
 
 ### Example Entry Workflow
 

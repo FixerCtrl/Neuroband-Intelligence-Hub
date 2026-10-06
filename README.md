@@ -63,10 +63,11 @@ Hub Guide only answers site navigation and feature-use questions. It does not re
 ## 🔑 Key Features
 
 ### Repository (Main Data Storage)
-- Add sources with complete metadata
+- Add sources with complete metadata and an actual PDF/image extract
 - Upload actual files (PDF, images, etc.)
 - Auto-generated file naming follows convention
 - Search & filter by KIN, KIQ, source type
+- Source records are saved only for signed-in, approved members; apply the latest `schema.sql` to enable source uploads and file cleanup
 
 ### Analysis Dashboard
 - **KIN Coverage:** See how many sources address each intelligence need
@@ -94,9 +95,9 @@ Hub Guide only answers site navigation and feature-use questions. It does not re
 - Part of your submission
 
 ### Activity Log
-- Audit trail showing all entries, updates, and deletions
+- Database audit trail records source, document, team profile, task, and task-comment changes, including changes made outside the page UI
 - Append-only (no edits or deletions of historical records)
-- Proof of systematic work
+- The Activity tab loads the full history, not just the most recent page of records
 
 ---
 
