@@ -1502,6 +1502,7 @@ async function submitEntry(e){
   const addedBy = myMemberProfile()?.name || currentUser?.email || "Unknown contributor";
   let uploadedFile = false;
   let entrySaved = false;
+  let contributorMetadataOmitted = false;
   let saveStage = "source file upload";
 
   try {
@@ -1527,23 +1528,41 @@ async function submitEntry(e){
       created_at: new Date().toISOString(),
     };
 
-    const { error: insertError } = await sbClient.from("entries").insert(record);
+    const compatibleRecord = { ...record };
+    const contributorFields = ["added_by", "added_by_email", "added_by_user_id"];
+    let insertError = null;
+    while (true) {
+      const { error } = await sbClient.from("entries").insert(compatibleRecord);
+      if (!error) {
+        insertError = null;
+        break;
+      }
+      insertError = error;
+      const missingField = error.code === "PGRST204"
+        ? contributorFields.find(field =>
+          Object.hasOwn(compatibleRecord, field)
+          && error.message?.includes(`'${field}'`)
+        )
+        : null;
+      if (!missingField) break;
+      delete compatibleRecord[missingField];
+      contributorMetadataOmitted = true;
+      console.warn(`Supabase schema cache does not include entries.${missingField}; retrying source save without this optional field.`);
+    }
     if (insertError) throw insertError;
     entrySaved = true;
 
-    status.textContent = "Saved.";
-    status.className = "form-status is-success";
+    status.textContent = contributorMetadataOmitted
+      ? "Source saved. Contributor details were omitted because the Supabase schema cache is outdated. Ask an admin to refresh the database schema when convenient."
+      : "Saved.";
+    status.className = contributorMetadataOmitted ? "form-status" : "form-status is-success";
     await loadEntries();
     await loadActivity();
     setTimeout(closeAddModal, 500);
   } catch (err) {
     console.error(err);
-    const missingContributorColumn = err.code === "PGRST204"
-      && ["added_by", "added_by_email", "added_by_user_id"].find(column => err.message?.includes(`'${column}'`));
     const isRlsError = err.code === "42501" || /row-level security policy/i.test(err.message || "");
-    if (missingContributorColumn) {
-      status.textContent = `Could not save repository record: the database schema cache is missing entries.${missingContributorColumn}. In Supabase SQL Editor, add the missing columns and reload the schema: ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_email text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL; NOTIFY pgrst, 'reload schema';`;
-    } else if (isRlsError) {
+    if (isRlsError) {
       const deniedResource = saveStage === "source file upload" ? "source file upload" : "repository record";
       status.textContent = `Supabase denied the ${deniedResource}. Your signed-in account needs a complete profile and admin approval. Ask an admin to approve you in Team; if you are already approved, ask them to rerun the latest schema.sql in Supabase.`;
     } else {
