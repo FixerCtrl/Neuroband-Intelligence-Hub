@@ -140,14 +140,16 @@ function isMemberProfileComplete(member = myMemberProfile()){
 
 function canAccessWorkspace(){
   const member = myMemberProfile();
-  return !!currentUser && !memberLoadError && isMemberProfileComplete(member) && (canManageLeadership() || member.approved === true);
+  return !!currentUser && !memberLoadError && isMemberProfileComplete(member)
+    && member.profile_completed === true
+    && (canManageLeadership() || member.approved === true);
 }
 
 function updateWorkspaceGate(){
   const gate = document.getElementById("workspace-gate");
   if (!gate) return;
   const member = myMemberProfile();
-  const profileComplete = isMemberProfileComplete(member);
+  const profileComplete = isMemberProfileComplete(member) && member.profile_completed === true;
   const hasAccess = !!currentUser && !memberLoadError && profileComplete && (canManageLeadership() || member.approved === true);
   const blocked = !!currentUser && !hasAccess;
   const profileModal = document.getElementById("member-modal-overlay");
@@ -1497,11 +1499,13 @@ async function submitEntry(e){
   const addedBy = myMemberProfile()?.name || currentUser?.email || "Unknown contributor";
   let uploadedFile = false;
   let entrySaved = false;
+  let saveStage = "source file upload";
 
   try {
     const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file);
     if (uploadError) throw uploadError;
     uploadedFile = true;
+    saveStage = "repository record";
 
     const record = {
       kin: document.getElementById("f-kin").value,
@@ -1531,7 +1535,7 @@ async function submitEntry(e){
     setTimeout(closeAddModal, 500);
   } catch (err) {
     console.error(err);
-    status.textContent = "Something went wrong: " + (err.message || err);
+    status.textContent = `Could not save ${saveStage}: ${err.message || err}`;
     status.className = "form-status is-error";
     if (uploadedFile && !entrySaved) {
       try {
@@ -1559,8 +1563,8 @@ async function loadMembers(){
     await sbClient.from("members").delete().is("user_id", null).in("name", ["FixerCtrl", "Team 01"]);
   }
   const memberFields = canManageLeadership() ? "*" : currentUser
-    ? "id,name,avatar_path,bio,user_id,created_at,last_seen_at,approved"
-    : "id,name,avatar_path,bio,user_id,created_at,approved";
+    ? "id,name,avatar_path,bio,user_id,created_at,last_seen_at,approved,profile_completed"
+    : "id,name,avatar_path,bio,user_id,created_at,approved,profile_completed";
   const { data, error } = await sbClient.from("members").select(memberFields).order("created_at", { ascending: true });
   if (error) {
     memberLoadError = error;
@@ -1867,7 +1871,7 @@ async function submitMember(e){
 
     if (mine) {
       const profileUpdates = { name, bio, avatar_path: avatarPath };
-      if (!memberEditorTargetId && !isMemberProfileComplete(mine)) profileUpdates.profile_completed = true;
+      if (!memberEditorTargetId && mine.profile_completed !== true) profileUpdates.profile_completed = true;
       const { error: updErr } = await sbClient.from("members").update(profileUpdates).eq("id", mine.id);
       if (updErr) throw updErr;
     } else {
