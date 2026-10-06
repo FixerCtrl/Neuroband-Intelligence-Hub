@@ -19,6 +19,37 @@ function safeFileName(name: string){
   return name.split(/[\\/]/).pop()?.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 100) || "whatsapp-source.pdf";
 }
 
+async function recordActivity(
+  admin: ReturnType<typeof createClient>,
+  actor: { email: string | null; name: string; userId: string | null },
+  action: string,
+  details: string | null,
+){
+  let duplicateQuery = admin.from("activity_log")
+    .select("id")
+    .eq("action", action)
+    .gte("created_at", new Date(Date.now() - 5000).toISOString())
+    .limit(1);
+  duplicateQuery = actor.userId
+    ? duplicateQuery.eq("actor_user_id", actor.userId)
+    : duplicateQuery.is("actor_user_id", null);
+  duplicateQuery = details === null
+    ? duplicateQuery.is("details", null)
+    : duplicateQuery.eq("details", details);
+  const { data: duplicate, error: lookupError } = await duplicateQuery.maybeSingle();
+  if (lookupError) console.warn("Could not check for a trigger-generated activity record:", lookupError.message);
+  if (duplicate) return;
+
+  const { error } = await admin.from("activity_log").insert({
+    actor_email: actor.email,
+    actor_name: actor.name,
+    actor_user_id: actor.userId,
+    action,
+    details,
+  });
+  if (error) console.warn("Could not record WhatsApp activity:", error.message);
+}
+
 async function validSignature(body: string, header: string | null){
   if (!header?.startsWith("sha256=")) return false;
   const signature = header.slice(7);
@@ -44,7 +75,7 @@ async function linkPhone(admin: ReturnType<typeof createClient>, phone: string, 
     return;
   }
   const { data: member, error: memberError } = await admin.from("members")
-    .select("approved,profile_completed,name,bio")
+    .select("approved,profile_completed,name,bio,user_id")
     .eq("id", link.member_id)
     .maybeSingle();
   if (memberError) throw memberError;
@@ -68,6 +99,14 @@ async function linkPhone(admin: ReturnType<typeof createClient>, phone: string, 
     }
     throw updateError;
   }
+  const { data: authRecord } = member.user_id
+    ? await admin.auth.admin.getUserById(member.user_id)
+    : { data: null };
+  await recordActivity(admin, {
+    email: authRecord?.user?.email || null,
+    name: member.name,
+    userId: member.user_id,
+  }, "connected WhatsApp", member.name);
   await sendWhatsAppText(phone, "WhatsApp is connected. You are opted in to brief task-assignment alerts. To add a source, send a PDF or image here and I’ll guide you through its details. Disconnect any time from your Team profile.");
 }
 
@@ -233,6 +272,11 @@ async function handleIntakeText(admin: ReturnType<typeof createClient>, phone: s
     };
     const { error: insertError } = await admin.from("entries").insert(record);
     if (insertError) throw insertError;
+    await recordActivity(admin, {
+      email: actorEmail,
+      name: member.name,
+      userId: member.user_id,
+    }, "added a source", `${record.source} (${record.kin}_${record.kiq})`);
     await admin.from("whatsapp_intake_sessions").delete().eq("phone_e164", phone);
     await sendWhatsAppText(phone, `Saved to the Repository: ${record.source} (${record.kin}_${record.kiq}).`);
     return;

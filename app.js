@@ -342,6 +342,7 @@ function wireWhatsAppSettings(){
       safeId("whatsapp-link-instructions").classList.add("is-hidden");
       safeId("whatsapp-open-link").classList.add("is-hidden");
       await loadWhatsAppSettings();
+      await logActivity("disconnected WhatsApp", myMemberProfile()?.name);
     } catch (error) {
       console.error("Could not disconnect WhatsApp:", error);
       safeId("whatsapp-settings-status").textContent = "Could not disconnect WhatsApp. Please try again.";
@@ -1076,6 +1077,7 @@ async function saveDocument(slug){
   document.getElementById("view-" + slug).innerHTML = cleanHtml;
   document.getElementById("view-" + slug).dataset.raw = newContent;
   toggleEdit(slug, false);
+  await logActivity("updated the " + (slug === "manual" ? "Manual" : "Collection Plan"));
 }
 
 // ---------- REPOSITORY: dropdowns ----------
@@ -1377,6 +1379,7 @@ function renderEntries(){
           alert("The repository entry was deleted, but its source file could not be removed. Please contact an admin.");
         }
       }
+      await logActivity("deleted a source", `${entry.source} (${entry.kin}_${entry.kiq})`);
       await loadEntries();
       await loadActivity();
     });
@@ -1551,6 +1554,7 @@ async function submitEntry(e){
     }
     if (insertError) throw insertError;
     entrySaved = true;
+    await logActivity("added a source", `${record.source} (${record.kin}_${record.kiq})`);
 
     status.textContent = contributorMetadataOmitted
       ? "Source saved. Contributor details were omitted because the Supabase schema cache is outdated. Ask an admin to refresh the database schema when convenient."
@@ -1791,7 +1795,10 @@ async function ensureMyProfile(isNewLogin = false){
     last_login_at: isNewLogin ? now : null,
     created_at: now
   }).select().single();
-  if (!error && data) currentMembers.push(data);
+  if (!error && data) {
+    currentMembers.push(data);
+    await logActivity("joined the team", data.name);
+  }
 }
 
 async function setMemberApproval(memberId){
@@ -1809,6 +1816,7 @@ async function setMemberApproval(memberId){
     return;
   }
   member.approved = approved;
+  await logActivity(approved ? "approved member access" : "revoked member access", member.name);
   renderMembers();
   updateWorkspaceGate();
   if (canAccessWorkspace()) await loadApprovedWorkspace();
@@ -1906,11 +1914,13 @@ async function submitMember(e){
       if (!memberEditorTargetId && mine.profile_completed !== true) profileUpdates.profile_completed = true;
       const { error: updErr } = await sbClient.from("members").update(profileUpdates).eq("id", mine.id);
       if (updErr) throw updErr;
+      await logActivity("updated a member profile", name);
     } else {
       const { error: insErr } = await sbClient.from("members").insert({
         name, bio, avatar_path: avatarPath, user_id: currentUser.id, approved: isAdminEmail(currentUser.email), profile_completed: true, created_at: new Date().toISOString()
       });
       if (insErr) throw insErr;
+      await logActivity("joined the team", name);
     }
 
     status.textContent = "Saved.";
@@ -1950,6 +1960,7 @@ async function handleAvatarReupload(e){
     if (upErr) throw upErr;
     const { error: updErr } = await sbClient.from("members").update({ avatar_path: avatarPath }).eq("id", reuploadTargetId);
     if (updErr) throw updErr;
+    await logActivity("updated a profile photo", member.name);
     await loadMembers();
   } catch (err) {
     console.error(err);
@@ -1972,6 +1983,8 @@ async function removeMember(memberId){
     alert("Could not remove team member: " + error.message);
     return;
   }
+  const removedMember = currentMembers.find(member => String(member.id) === String(memberId));
+  await logActivity("removed a team member", removedMember?.name);
   await loadMembers();
   await loadTasks();
 }
@@ -2402,6 +2415,7 @@ function renderTasks(){
         if (error) throw error;
         task.assigned_to = selected.id;
         if (previousAssigner) task.assigned_by = previousAssigner;
+        await logActivity("reassigned a task", `"${task.title}" from ${currentAssignee?.name || "Unassigned"} to ${selected.name}`);
         try {
           const { error: notificationError } = await sbClient.functions.invoke("whatsapp-task-assigned", { body: { task_id: task.id } });
           if (notificationError) console.warn("WhatsApp reassignment alert was not sent:", notificationError);
@@ -2430,6 +2444,7 @@ function renderTasks(){
       renderTasks();
       renderAnalysis();
       renderOverview();
+      await logActivity("deleted a task", `"${task.title}"`);
       await loadTasks();
     });
   });
@@ -2457,6 +2472,7 @@ async function submitTaskComment(event, taskId){
     alert("Could not send the comment. Please ask the admin to run the latest schema.sql migration.\n\n" + error.message);
     return;
   }
+  await logActivity("commented on a task", task.title);
   event.currentTarget.reset();
   await loadTaskComments();
   renderTasks();
@@ -2478,6 +2494,7 @@ async function updateTaskStatus(taskId, status){
   }
   if (task) task.status = status;
   renderOverview();
+  await logActivity("changed task status", task ? `"${task.title}" → ${status}` : `→ ${status}`);
 }
 
 function populateTaskPeopleDropdowns(){
@@ -2576,6 +2593,8 @@ async function submitTask(e){
   try {
     const { data: createdTask, error } = await sbClient.from("tasks").insert(record).select("id").single();
     if (error) throw error;
+    const assignee = memberById(record.assigned_to);
+    await logActivity("assigned a task", `"${record.title}" to ${assignee ? assignee.name : "someone"}`);
     status.textContent = "Assigned.";
     status.className = "form-status is-success";
     try {
@@ -2607,20 +2626,86 @@ async function submitTask(e){
 async function logActivity(action, details){
   if (!sbClient || !currentUser) return false;
   try {
-    const { error } = await sbClient.from("activity_log").insert({
+    const cutoff = new Date(Date.now() - 5000).toISOString();
+    let duplicateQuery = sbClient.from("activity_log")
+      .select("*")
+      .eq("actor_user_id", currentUser.id)
+      .eq("action", action)
+      .gte("created_at", cutoff)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    duplicateQuery = details ? duplicateQuery.eq("details", details) : duplicateQuery.is("details", null);
+    let { data: duplicates, error: duplicateError } = await duplicateQuery;
+    if (duplicateError?.code === "PGRST204" && duplicateError.message?.includes("'actor_user_id'")) {
+      let fallbackQuery = sbClient.from("activity_log")
+        .select("*")
+        .eq("actor_email", currentUser.email)
+        .eq("action", action)
+        .gte("created_at", cutoff)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      fallbackQuery = details ? fallbackQuery.eq("details", details) : fallbackQuery.is("details", null);
+      ({ data: duplicates, error: duplicateError } = await fallbackQuery);
+    }
+    if (duplicateError) console.warn("Could not check for a trigger-generated activity record:", duplicateError);
+    if (duplicates?.length) {
+      upsertActivityInView(duplicates[0]);
+      return true;
+    }
+
+    const record = {
       actor_email: currentUser.email,
       actor_name: myMemberProfile()?.name || currentUser.user_metadata?.full_name || currentUser.email,
       actor_user_id: currentUser.id,
       action,
       details: details || null,
       created_at: new Date().toISOString(),
-    });
+    };
+    let compatibleRecord = { ...record };
+    let data = null;
+    let error = null;
+    const optionalActorFields = ["actor_name", "actor_user_id"];
+    while (true) {
+      const result = await sbClient.from("activity_log")
+        .insert(compatibleRecord)
+        .select("*")
+        .single();
+      if (!result.error) {
+        data = result.data;
+        error = null;
+        break;
+      }
+      error = result.error;
+      const missingField = error.code === "PGRST204"
+        ? optionalActorFields.find(field =>
+          Object.hasOwn(compatibleRecord, field)
+          && error.message?.includes(`'${field}'`)
+        )
+        : null;
+      if (!missingField) break;
+      delete compatibleRecord[missingField];
+      console.warn(`Supabase schema cache does not include activity_log.${missingField}; retrying without optional actor metadata.`);
+    }
     if (error) throw error;
+    if (data) upsertActivityInView(data);
     return true;
   } catch (err) {
-    console.error("Activity log failed (non-fatal):", err);
+    console.error("Activity log failed:", err);
+    showActivityToast({
+      actor_email: currentUser.email,
+      action: `Activity could not be recorded: ${action}`,
+    });
     return false;
   }
+}
+
+function upsertActivityInView(activity){
+  currentActivity = [
+    activity,
+    ...currentActivity.filter(item => String(item.id) !== String(activity.id)),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  populateActivityFilters();
+  renderActivity();
 }
 
 async function loadActivity(){
