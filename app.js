@@ -1537,9 +1537,15 @@ async function submitEntry(e){
     console.error(err);
     const missingContributorColumn = err.code === "PGRST204"
       && ["added_by", "added_by_email", "added_by_user_id"].find(column => err.message?.includes(`'${column}'`));
-    status.textContent = missingContributorColumn
-      ? `Could not save repository record: the database schema cache is missing entries.${missingContributorColumn}. In Supabase SQL Editor, add the missing columns and reload the schema: ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_email text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL; NOTIFY pgrst, 'reload schema';`
-      : `Could not save ${saveStage}: ${err.message || err}`;
+    const isRlsError = err.code === "42501" || /row-level security policy/i.test(err.message || "");
+    if (missingContributorColumn) {
+      status.textContent = `Could not save repository record: the database schema cache is missing entries.${missingContributorColumn}. In Supabase SQL Editor, add the missing columns and reload the schema: ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_email text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL; NOTIFY pgrst, 'reload schema';`;
+    } else if (isRlsError) {
+      const deniedResource = saveStage === "source file upload" ? "source file upload" : "repository record";
+      status.textContent = `Supabase denied the ${deniedResource}. Your signed-in account needs a complete profile and admin approval. Ask an admin to approve you in Team; if you are already approved, ask them to rerun the latest schema.sql in Supabase.`;
+    } else {
+      status.textContent = `Could not save ${saveStage}: ${err.message || err}`;
+    }
     status.className = "form-status is-error";
     if (uploadedFile && !entrySaved) {
       try {
