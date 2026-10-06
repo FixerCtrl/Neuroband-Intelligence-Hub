@@ -1535,7 +1535,11 @@ async function submitEntry(e){
     setTimeout(closeAddModal, 500);
   } catch (err) {
     console.error(err);
-    status.textContent = `Could not save ${saveStage}: ${err.message || err}`;
+    const missingContributorColumn = err.code === "PGRST204"
+      && ["added_by", "added_by_email", "added_by_user_id"].find(column => err.message?.includes(`'${column}'`));
+    status.textContent = missingContributorColumn
+      ? `Could not save repository record: the database schema cache is missing entries.${missingContributorColumn}. In Supabase SQL Editor, add the missing columns and reload the schema: ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_email text; ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS added_by_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL; NOTIFY pgrst, 'reload schema';`
+      : `Could not save ${saveStage}: ${err.message || err}`;
     status.className = "form-status is-error";
     if (uploadedFile && !entrySaved) {
       try {
