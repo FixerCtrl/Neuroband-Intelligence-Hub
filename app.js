@@ -140,9 +140,11 @@ function isMemberProfileComplete(member = myMemberProfile()){
 
 function canAccessWorkspace(){
   const member = myMemberProfile();
-  return !!currentUser && !memberLoadError && isMemberProfileComplete(member)
-    && member.profile_completed === true
-    && (canManageLeadership() || member.approved === true);
+  return !!currentUser && (canManageLeadership()
+    || (!memberLoadError
+      && isMemberProfileComplete(member)
+      && member.profile_completed === true
+      && member.approved === true));
 }
 
 function updateWorkspaceGate(){
@@ -150,7 +152,8 @@ function updateWorkspaceGate(){
   if (!gate) return;
   const member = myMemberProfile();
   const profileComplete = isMemberProfileComplete(member) && member.profile_completed === true;
-  const hasAccess = !!currentUser && !memberLoadError && profileComplete && (canManageLeadership() || member.approved === true);
+  const hasAccess = !!currentUser && (canManageLeadership()
+    || (!memberLoadError && profileComplete && member.approved === true));
   const blocked = !!currentUser && !hasAccess;
   const profileModal = document.getElementById("member-modal-overlay");
   const editingOwnProfile = !!profileModal && !profileModal.classList.contains("is-hidden") && !memberEditorTargetId;
