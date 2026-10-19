@@ -29,6 +29,7 @@ create table if not exists entries (
 alter table entries add column if not exists added_by text;
 alter table entries add column if not exists added_by_email text;
 alter table entries add column if not exists added_by_user_id uuid references auth.users(id) on delete set null;
+alter table entries add column if not exists source_url text;
 
 -- Table: documents (Collection Plan + Manual text, editable in the UI)
 create table if not exists documents (

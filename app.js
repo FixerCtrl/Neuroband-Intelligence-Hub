@@ -1113,9 +1113,24 @@ function populateFormDropdowns(){
   wireFilterDropdown(filterType, "filter-type");
 
   document.getElementById("f-file").addEventListener("change", updateFilenamePreview);
+  document.getElementById("f-source-kind").addEventListener("change", updateSourceMaterialFields);
   ["f-kin","f-kiq","f-type","f-source","f-date-pub"].forEach(id => {
     document.getElementById(id).addEventListener("change", updateFilenamePreview);
   });
+  updateSourceMaterialFields();
+}
+
+function updateSourceMaterialFields(){
+  const isLink = document.getElementById("f-source-kind").value === "link";
+  const fileInput = document.getElementById("f-file");
+  const linkInput = document.getElementById("f-source-url");
+  document.getElementById("f-file-field").classList.toggle("is-hidden", isLink);
+  document.getElementById("f-link-field").classList.toggle("is-hidden", !isLink);
+  fileInput.required = !isLink;
+  linkInput.required = isLink;
+  if (isLink) fileInput.value = "";
+  else linkInput.value = "";
+  document.getElementById("filename-preview").classList.toggle("is-hidden", isLink);
 }
 
 function wireFilterDropdown(select, idPrefix){
@@ -1279,7 +1294,7 @@ function renderEntries(){
       if (collectionPeriod === "older" ? ageInDays <= 90 : ageInDays < 0 || ageInDays > Number(collectionPeriod)) return false;
     }
     if (search) {
-      const hay = `${e.source} ${e.author} ${e.added_by || ""} ${e.added_by_email || ""} ${e.relevance}`.toLowerCase();
+      const hay = `${e.source} ${e.source_url || ""} ${e.author} ${e.added_by || ""} ${e.added_by_email || ""} ${e.relevance}`.toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -1416,6 +1431,7 @@ function truncate(str, n){ return str && str.length > n ? str.slice(0, n) + "…
 async function openDetail(entry){
   const modal = document.getElementById("detail-modal");
   const fileUrl = await getPublicFileUrl(entry.file_path);
+  const sourceUrl = normalizeSourceUrl(entry.source_url);
   const fileName = entry.file_name || entry.file_path || "";
   const fileExtension = fileName.split(".").pop().toLowerCase();
   const imageExtensions = ["avif", "gif", "jpeg", "jpg", "png", "webp"];
@@ -1436,12 +1452,13 @@ async function openDetail(entry){
       <span class="tag tag-kiq">${entry.kiq}</span>
     </div>
     ${filePreview}
+    ${sourceUrl ? `<a class="detail-file-link" href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source link →</a>` : ""}
     <div class="detail-field"><div class="k">Author / organisation</div><div class="v">${escapeHtml(entry.author)}</div></div>
     ${entryContributorMarkup(entry)}
     <div class="detail-field"><div class="k">Date published / collected</div><div class="v">${entry.date_published || "—"} / ${entry.date_collected || "—"}</div></div>
     <div class="detail-field"><div class="k">Type of source</div><div class="v">${escapeHtml(entry.source_type)}</div></div>
     <div class="detail-field"><div class="k">Relevance to KIQ</div><div class="v">${escapeHtml(entry.relevance)}</div></div>
-    <div class="detail-field"><div class="k">File name</div><div class="v" style="font-family:var(--font-sans); font-size:12px;">${escapeHtml(entry.file_name || "")}</div></div>
+    ${entry.file_name ? `<div class="detail-field"><div class="k">File name</div><div class="v" style="font-family:var(--font-sans); font-size:12px;">${escapeHtml(entry.file_name)}</div></div>` : ""}
     ${fileUrl ? `<a class="detail-file-link" href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer">Open extract in new tab →</a>` : ""}
   `;
   document.getElementById("close-detail").addEventListener("click", closeDetail);
@@ -1454,6 +1471,16 @@ async function getPublicFileUrl(path){
   if (!path || !sbClient) return null;
   const { data, error } = await sbClient.storage.from("sources").createSignedUrl(path, 3600);
   return error ? null : data?.signedUrl || null;
+}
+
+function normalizeSourceUrl(value){
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- ADD ENTRY MODAL ----------
@@ -1478,6 +1505,7 @@ function wireModal(){
 function closeAddModal(){
   document.getElementById("modal-overlay").classList.add("is-hidden");
   document.getElementById("entry-form").reset();
+  updateSourceMaterialFields();
   document.getElementById("form-status").textContent = "";
   document.getElementById("form-status").className = "form-status";
   entryUploadToken = "";
@@ -1496,23 +1524,35 @@ async function submitEntry(e){
   }
 
   submitBtn.disabled = true;
-  status.textContent = "Uploading extract…";
+  status.textContent = "Saving source…";
   status.className = "form-status";
 
   const fileInput = document.getElementById("f-file");
+  const isLink = document.getElementById("f-source-kind").value === "link";
+  status.textContent = isLink ? "Saving source link…" : "Uploading extract…";
   const file = fileInput.files[0];
-  const fileName = buildFileName();
+  const sourceUrl = isLink ? normalizeSourceUrl(document.getElementById("f-source-url").value.trim()) : null;
+  if (isLink && !sourceUrl) {
+    status.textContent = "Enter a valid web address starting with http:// or https://.";
+    status.className = "form-status is-error";
+    submitBtn.disabled = false;
+    return;
+  }
+  const fileName = isLink ? null : buildFileName();
   const addedBy = myMemberProfile()?.name || currentUser?.email || "Unknown contributor";
   let uploadedFile = false;
   let entrySaved = false;
   let contributorMetadataOmitted = false;
-  let saveStage = "source file upload";
+  let saveStage = isLink ? "repository record" : "source file upload";
 
   try {
-    const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file);
-    if (uploadError) throw uploadError;
-    uploadedFile = true;
-    saveStage = "repository record";
+    if (!isLink) {
+      status.textContent = "Uploading extract…";
+      const { error: uploadError } = await sbClient.storage.from("sources").upload(fileName, file);
+      if (uploadError) throw uploadError;
+      uploadedFile = true;
+      saveStage = "repository record";
+    }
 
     const record = {
       kin: document.getElementById("f-kin").value,
@@ -1526,6 +1566,7 @@ async function submitEntry(e){
       date_published: document.getElementById("f-date-pub").value,
       date_collected: document.getElementById("f-date-collected").value,
       relevance: document.getElementById("f-relevance").value,
+      source_url: sourceUrl,
       file_path: fileName,
       file_name: fileName,
       created_at: new Date().toISOString(),

@@ -63,11 +63,11 @@ Hub Guide only answers site navigation and feature-use questions. It does not re
 ## 🔑 Key Features
 
 ### Repository (Main Data Storage)
-- Add sources with complete metadata and an actual PDF/image extract
-- Upload actual files (PDF, images, etc.)
+- Add sources with complete metadata and either a PDF/image extract or a web link
+- Upload actual files (PDF, images, etc.) or submit an HTTP(S) source URL
 - Auto-generated file naming follows convention
 - Search & filter by KIN, KIQ, source type
-- Source records are saved only for signed-in, approved members; apply the latest `schema.sql` to enable source uploads and file cleanup
+- Source records are saved only for signed-in, approved members; apply the latest `schema.sql` to enable uploads, link submissions, and file cleanup
 
 ### Analysis Dashboard
 - **KIN Coverage:** See how many sources address each intelligence need

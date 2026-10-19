@@ -396,8 +396,19 @@
         <textarea id="f-relevance" rows="3" placeholder="e.g. Confirms competitor pricing strategy referenced in KIN1_KIQ2" required></textarea>
       </label>
 
-      <label>Extract file (PDF or image — the actual downloaded source, not a link)
+      <label>Source material
+        <select id="f-source-kind">
+          <option value="file">Upload a PDF or image</option>
+          <option value="link">Submit a web link</option>
+        </select>
+      </label>
+
+      <label id="f-file-field">Extract file (PDF or image)
         <input type="file" id="f-file" accept=".pdf,image/*" required />
+      </label>
+
+      <label id="f-link-field" class="is-hidden">Source URL
+        <input type="url" id="f-source-url" placeholder="https://example.com/article" />
       </label>
 
       <p class="filename-preview" id="filename-preview"></p>
