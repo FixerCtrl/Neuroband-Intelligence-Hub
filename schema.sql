@@ -31,6 +31,16 @@ alter table entries add column if not exists added_by_email text;
 alter table entries add column if not exists added_by_user_id uuid references auth.users(id) on delete set null;
 alter table entries add column if not exists source_url text;
 
+-- Link-only submissions stay separate until their source metadata is complete.
+create table if not exists pending_source_links (
+  id uuid primary key default gen_random_uuid(),
+  url text not null,
+  added_by text,
+  added_by_email text,
+  added_by_user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
 -- Table: documents (Collection Plan + Manual text, editable in the UI)
 create table if not exists documents (
   slug text primary key,
@@ -401,6 +411,7 @@ where m.user_id = u.id
 -- admins (see is_admin() above) can delete.
 -- ------------------------------------------------------------
 alter table entries enable row level security;
+alter table pending_source_links enable row level security;
 alter table documents enable row level security;
 alter table members enable row level security;
 alter table member_whatsapp enable row level security;
@@ -561,6 +572,16 @@ create policy "Approved members insert entries" on entries for insert
 create policy "Approved members update entries" on entries for update
   using (is_approved_member()) with check (is_approved_member());
 
+drop policy if exists "Approved members read pending source links" on pending_source_links;
+drop policy if exists "Approved members submit pending source links" on pending_source_links;
+drop policy if exists "Approved members remove pending source links" on pending_source_links;
+create policy "Approved members read pending source links" on pending_source_links
+  for select using (is_approved_member());
+create policy "Approved members submit pending source links" on pending_source_links
+  for insert with check (auth.role() = 'authenticated' and is_approved_member());
+create policy "Approved members remove pending source links" on pending_source_links
+  for delete using (is_approved_member());
+
 drop policy if exists "Public read on documents" on documents;
 drop policy if exists "Authenticated insert on documents" on documents;
 drop policy if exists "Everyone can edit documents" on documents;
@@ -659,6 +680,9 @@ do $$
 begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'entries') then
     alter publication supabase_realtime add table entries;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'pending_source_links') then
+    alter publication supabase_realtime add table pending_source_links;
   end if;
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'members') then
     alter publication supabase_realtime add table members;

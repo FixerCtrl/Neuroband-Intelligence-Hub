@@ -37,13 +37,14 @@ Edit this block directly — it's saved to your Supabase project as soon as you 
 - Store each source as a separate entry in the Repository tab.
 - Complete all required fields: Source, Author, Date, Type of Source, and Relevance to KIQ.
 - Select the related KIN and KIQ.
-- Upload the original extract file directly as a PDF or image. Do not add a link instead.
+- Use Paste a link to queue a URL for review, then select Add metadata to complete its repository entry.
+- Upload the original extract as a PDF or image when available or required by the assignment.
 
 DATA RETRIEVAL
 - Search by source, author, or notes using the Repository search bar.
 - Combine filters for KIN, KIQ, and Source Type.
 - Example: select KIN2 and News article to narrow the results.
-- Select an entry card to view the full record and download the original file.
+- Select an entry card to view the full record and open its extract or source link.
 
 CONSISTENCY
 - Use the KIN and KIQ dropdowns generated from config.js.
@@ -67,6 +68,9 @@ Edit this page when the process changes. Changes are saved after selecting Save 
 let sbClient = null;
 let currentEntries = [];
 let currentEntriesLoadError = null;
+let currentPendingSourceLinks = [];
+let currentPendingSourceLinksLoadError = null;
+let pendingSourceLinkId = null;
 let entryUploadToken = "";
 let currentMembers = [];
 let memberLoadError = null;
@@ -111,6 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadDocument("collection_plan");
   loadDocument("manual");
   loadEntries();
+  loadPendingSourceLinks();
   loadMembers();
   loadTasks();
   loadActivity();
@@ -1272,6 +1277,89 @@ async function loadEntries(){
   renderOverview();
 }
 
+async function loadPendingSourceLinks(){
+  const section = document.getElementById("pending-link-section");
+  if (!sbClient) {
+    section.classList.add("is-hidden");
+    return;
+  }
+  const { data, error } = await sbClient.from("pending_source_links").select("*").order("created_at", { ascending: false });
+  currentPendingSourceLinksLoadError = error;
+  if (error) console.error("Pending source links load failed:", error);
+  if (!error && data) currentPendingSourceLinks = data;
+  renderPendingSourceLinks();
+}
+
+function renderPendingSourceLinks(){
+  const section = document.getElementById("pending-link-section");
+  const list = document.getElementById("pending-link-list");
+  const count = document.getElementById("pending-link-count");
+  const empty = document.getElementById("pending-link-empty");
+  section.classList.toggle("is-hidden", !currentPendingSourceLinks.length && !currentPendingSourceLinksLoadError);
+  count.textContent = currentPendingSourceLinksLoadError
+    ? "Could not load pending links"
+    : `${currentPendingSourceLinks.length} waiting`;
+  list.innerHTML = "";
+  empty.textContent = currentPendingSourceLinksLoadError
+    ? currentPendingSourceLinksLoadError.message
+    : "No links are waiting for review.";
+  empty.classList.toggle("is-hidden", currentPendingSourceLinks.length > 0);
+
+  currentPendingSourceLinks.forEach(link => {
+    const safeUrl = normalizeSourceUrl(link.url);
+    if (!safeUrl) return;
+    const host = new URL(safeUrl).hostname;
+    const item = document.createElement("article");
+    item.className = "pending-link-item";
+    item.innerHTML = `
+      <div class="pending-link-copy">
+        <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(host)}</a>
+        <span>${escapeHtml(safeUrl)}</span>
+        <small>Submitted by ${escapeHtml(link.added_by || link.added_by_email || "A team member")} · ${escapeHtml(new Date(link.created_at).toLocaleDateString())}</small>
+      </div>
+      <div class="pending-link-actions">
+        <button type="button" class="btn btn-primary btn-small pending-link-complete" data-link-id="${escapeHtml(link.id)}">Add metadata</button>
+        <button type="button" class="btn btn-ghost btn-small pending-link-remove" data-link-id="${escapeHtml(link.id)}">Remove</button>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+
+  list.querySelectorAll(".pending-link-complete").forEach(button => {
+    button.addEventListener("click", () => {
+      const link = currentPendingSourceLinks.find(item => item.id === button.dataset.linkId);
+      if (link) openPendingSourceLink(link);
+    });
+  });
+  list.querySelectorAll(".pending-link-remove").forEach(button => {
+    button.addEventListener("click", async () => {
+      const link = currentPendingSourceLinks.find(item => item.id === button.dataset.linkId);
+      if (!link || !confirm("Remove this pending link?")) return;
+      const { error } = await sbClient.from("pending_source_links").delete().eq("id", link.id);
+      if (error) {
+        alert("Could not remove pending link: " + error.message);
+        return;
+      }
+      await loadPendingSourceLinks();
+    });
+  });
+}
+
+function openPendingSourceLink(link){
+  const sourceUrl = normalizeSourceUrl(link.url);
+  if (!sourceUrl) return;
+  pendingSourceLinkId = link.id;
+  document.getElementById("entry-form").reset();
+  document.getElementById("f-source-kind").value = "link";
+  document.getElementById("f-source-url").value = sourceUrl;
+  document.getElementById("f-source").value = new URL(sourceUrl).hostname;
+  document.getElementById("f-date-collected").value = new Date().toISOString().slice(0, 10);
+  document.getElementById("entry-modal-title").textContent = "Complete source details";
+  updateSourceMaterialFields();
+  document.getElementById("modal-overlay").classList.remove("is-hidden");
+  document.getElementById("f-kin").focus();
+}
+
 function renderEntries(){
   const search = document.getElementById("filter-search").value.toLowerCase();
   const kin = document.getElementById("filter-kin").value;
@@ -1487,10 +1575,23 @@ function normalizeSourceUrl(value){
 function wireModal(){
   document.getElementById("open-add-entry").addEventListener("click", () => {
     if (!requireAuth()) return;
+    pendingSourceLinkId = null;
+    document.getElementById("entry-modal-title").textContent = "Add a source";
     entryUploadToken = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     document.getElementById("modal-overlay").classList.remove("is-hidden");
     updateFilenamePreview();
   });
+  document.getElementById("open-paste-link").addEventListener("click", () => {
+    if (!requireAuth()) return;
+    document.getElementById("pending-link-overlay").classList.remove("is-hidden");
+    document.getElementById("pending-link-url").focus();
+  });
+  document.getElementById("close-paste-link").addEventListener("click", closePendingLinkModal);
+  document.getElementById("cancel-paste-link").addEventListener("click", closePendingLinkModal);
+  document.getElementById("pending-link-overlay").addEventListener("click", event => {
+    if (event.target.id === "pending-link-overlay") closePendingLinkModal();
+  });
+  document.getElementById("pending-link-form").addEventListener("submit", submitPendingSourceLink);
   document.getElementById("close-add-entry").addEventListener("click", closeAddModal);
   document.getElementById("cancel-add-entry").addEventListener("click", closeAddModal);
   document.getElementById("detail-overlay").addEventListener("click", (e) => {
@@ -1509,6 +1610,53 @@ function closeAddModal(){
   document.getElementById("form-status").textContent = "";
   document.getElementById("form-status").className = "form-status";
   entryUploadToken = "";
+  pendingSourceLinkId = null;
+  document.getElementById("entry-modal-title").textContent = "Add a source";
+}
+
+function closePendingLinkModal(){
+  document.getElementById("pending-link-overlay").classList.add("is-hidden");
+  document.getElementById("pending-link-form").reset();
+  document.getElementById("pending-link-status").textContent = "";
+  document.getElementById("pending-link-status").className = "form-status";
+}
+
+async function submitPendingSourceLink(event){
+  event.preventDefault();
+  if (!requireAuth()) return;
+  const status = document.getElementById("pending-link-status");
+  const submitButton = document.getElementById("submit-pending-link");
+  const url = normalizeSourceUrl(document.getElementById("pending-link-url").value.trim());
+  if (!url) {
+    status.textContent = "Enter a valid URL starting with http:// or https://.";
+    status.className = "form-status is-error";
+    return;
+  }
+  if (!sbClient) {
+    status.textContent = "Not connected to Supabase yet — check config.js.";
+    status.className = "form-status is-error";
+    return;
+  }
+
+  submitButton.disabled = true;
+  status.textContent = "Adding link to pending review…";
+  status.className = "form-status";
+  try {
+    const { error } = await sbClient.from("pending_source_links").insert({
+      url,
+      added_by: myMemberProfile()?.name || currentUser?.email || "Unknown contributor",
+      added_by_email: currentUser?.email || null,
+      added_by_user_id: currentUser?.id || null,
+    });
+    if (error) throw error;
+    closePendingLinkModal();
+    await loadPendingSourceLinks();
+  } catch (error) {
+    status.textContent = `Could not submit link: ${error.message || error}`;
+    status.className = "form-status is-error";
+  } finally {
+    submitButton.disabled = false;
+  }
 }
 
 async function submitEntry(e){
@@ -1595,9 +1743,19 @@ async function submitEntry(e){
     }
     if (insertError) throw insertError;
     entrySaved = true;
+    let pendingLinkCleanupFailed = false;
+    if (pendingSourceLinkId) {
+      const { error: pendingDeleteError } = await sbClient.from("pending_source_links").delete().eq("id", pendingSourceLinkId);
+      pendingLinkCleanupFailed = !!pendingDeleteError;
+      if (pendingDeleteError) console.error("Source was saved, but the pending link could not be removed:", pendingDeleteError);
+      else pendingSourceLinkId = null;
+      await loadPendingSourceLinks();
+    }
     await logActivity("added a source", `${record.source} (${record.kin}_${record.kiq})`);
 
-    status.textContent = contributorMetadataOmitted
+    status.textContent = pendingLinkCleanupFailed
+      ? "Source saved, but its pending link could not be cleared. Remove it from Pending links when convenient."
+      : contributorMetadataOmitted
       ? "Source saved. Contributor details were omitted because the Supabase schema cache is outdated. Ask an admin to refresh the database schema when convenient."
       : "Saved.";
     status.className = contributorMetadataOmitted ? "form-status" : "form-status is-success";
@@ -2919,6 +3077,10 @@ function initRealtime(){
 
   sbClient.channel("public:entries")
     .on("postgres_changes", { event: "*", schema: "public", table: "entries" }, () => loadEntries())
+    .subscribe();
+
+  sbClient.channel("public:pending_source_links")
+    .on("postgres_changes", { event: "*", schema: "public", table: "pending_source_links" }, () => loadPendingSourceLinks())
     .subscribe();
 
   sbClient.channel("public:members")

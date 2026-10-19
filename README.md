@@ -64,10 +64,11 @@ Hub Guide only answers site navigation and feature-use questions. It does not re
 
 ### Repository (Main Data Storage)
 - Add sources with complete metadata and either a PDF/image extract or a web link
-- Upload actual files (PDF, images, etc.) or submit an HTTP(S) source URL
+- Paste a URL into Pending links for quick intake, then complete its source metadata before it enters the repository
+- Upload actual files (PDF, images, etc.) or queue a valid HTTP(S) source URL
 - Auto-generated file naming follows convention
 - Search & filter by KIN, KIQ, source type
-- Source records are saved only for signed-in, approved members; apply the latest `schema.sql` to enable uploads, link submissions, and file cleanup
+- Source records and pending links are available only to signed-in, approved members; apply the latest `schema.sql` to enable uploads, link intake, and file cleanup
 
 ### Analysis Dashboard
 - **KIN Coverage:** See how many sources address each intelligence need

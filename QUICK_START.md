@@ -66,12 +66,12 @@ const ADMIN_EMAILS = [ "your@email.com", "teammate@email.com" ];
 5. **Date Published** — When was it published?
 6. **Type of Source** — Article? Report? News? (dropdown)
 7. **Relevance to KIQ** — Why does this matter? (1–2 sentences)
-8. **Upload File** — The actual source (PDF, image, etc.)
+8. **Source material** — Upload a PDF/image, or use **Paste a link** to queue a URL for review. Complete its metadata with **Add metadata** before it enters the repository.
 
 ### ✅ Quality Check:
 - [ ] Credible source?
 - [ ] Relevant to a KIQ?
-- [ ] File uploaded (NOT a link)?
+- [ ] Source link or extract is credible and accessible?
 - [ ] Relevance field clearly explains connection to KIQ?
 
 ---

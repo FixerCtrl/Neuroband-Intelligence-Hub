@@ -205,13 +205,15 @@ The **Repository tab** is your central database. Each entry represents one sourc
 | **Type of Source** | Category from the dropdown | News article, Journal article, etc. |
 | **Relevance to KIQ** | **Why** is this relevant to your KIQ? (1–2 sentences) | "Discusses Neuroband's new EEG algorithms vs. competitor offerings" |
 
-### Uploading Source Files
+### Submitting a Source
 
-**Assignment requirement: "Provide extracts, not links. Download the actual source (e.g. PDF, image)."**
+Use **Paste a link** in the Repository tab for a quick URL-only submission. It appears under **Pending links** and does not count as a repository source until its metadata is completed.
 
-- Locate the **File Upload** section.
-- Upload the original document (PDF, screenshot, image, etc.).
-- **Do NOT add a link.** The system only accepts actual file uploads.
+1. Select **Add metadata** on the pending link.
+2. Complete the KIN, KIQ, source, author, dates, type, and relevance fields.
+3. Choose the web link or upload an extract when available or required by the assignment.
+
+For assignments that require source extracts, download the original document (PDF, screenshot, image, etc.) and use the file-upload option.
 - The system will automatically generate a file name following your group's naming convention:
   ```
   NEUROBAND_KIN2_KIQ1_NewsArticle_20240312_BusinessInsiderAfrica_a1b2c3d4.pdf
@@ -237,7 +239,7 @@ The **Repository tab** is your central database. Each entry represents one sourc
 - [ ] Is this source **credible** (identifiable author/publication)?
 - [ ] Is it **current** (unless historically relevant)?
 - [ ] Does it **directly** address one of your KIQs?
-- [ ] Have you included the **actual file**, not a link?
+- [ ] If an extract is required, have you included the actual file as well as the source link?
 - [ ] Is the **Relevance** field clear and specific to your KIQ?
 
 ---

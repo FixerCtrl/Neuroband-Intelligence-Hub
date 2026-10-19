@@ -135,7 +135,10 @@
           <p class="eyebrow">Phase 2 &amp; 3</p>
           <h1>Repository</h1>
         </div>
-        <button class="btn repository-add-btn" id="open-add-entry">+ Add source</button>
+        <div class="repository-header-actions">
+          <button class="btn btn-ghost" id="open-paste-link">Paste a link</button>
+          <button class="btn repository-add-btn" id="open-add-entry">+ Add source</button>
+        </div>
       </header>
 
       <div class="filter-bar repository-filters">
@@ -180,6 +183,14 @@
         <p class="repository-filter-summary is-hidden" id="repository-filter-summary" aria-live="polite"></p>
         <button type="button" class="btn btn-ghost btn-small repository-view-toggle" id="repository-view-toggle" aria-pressed="false">Group by date &amp; type</button>
       </div>
+      <section class="pending-link-section is-hidden" id="pending-link-section" aria-labelledby="pending-link-title">
+        <header class="pending-link-heading">
+          <h2 id="pending-link-title">Pending links</h2>
+          <span id="pending-link-count"></span>
+        </header>
+        <div class="pending-link-list" id="pending-link-list"></div>
+        <p class="pending-link-empty is-hidden" id="pending-link-empty">No links are waiting for review.</p>
+      </section>
       <div class="repository-groups" id="card-grid"></div>
       <p class="empty-state is-hidden" id="empty-state">No entries match yet. Add your first source, or clear your filters.</p>
     </section>
@@ -352,11 +363,31 @@
   <button type="button" class="site-guide-toggle" id="site-guide-toggle" aria-expanded="false" aria-controls="site-guide-panel" title="Open Hub Guide">Hub Guide</button>
 </div>
 
+<!-- QUICK LINK SUBMISSION -->
+<div class="modal-overlay is-hidden" id="pending-link-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Submit a link for review</h2>
+      <button class="modal-close" id="close-paste-link" aria-label="Close">&times;</button>
+    </div>
+    <form id="pending-link-form">
+      <label>Source URL
+        <input type="url" id="pending-link-url" placeholder="https://example.com/article" required />
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="cancel-paste-link">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-pending-link">Add to pending links</button>
+      </div>
+      <p class="form-status" id="pending-link-status" aria-live="polite"></p>
+    </form>
+  </div>
+</div>
+
 <!-- ADD ENTRY MODAL -->
 <div class="modal-overlay is-hidden" id="modal-overlay">
   <div class="modal">
     <div class="modal-head">
-      <h2>Add a source</h2>
+      <h2 id="entry-modal-title">Add a source</h2>
       <button class="modal-close" id="close-add-entry">&times;</button>
     </div>
 
